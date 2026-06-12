@@ -122,6 +122,7 @@ async def _run_polling() -> None:
 
     # Minimal aiohttp app just to keep port 8000 open for Replit health checks
     health_app = web.Application()
+    health_app.router.add_get("/", index_handler)
     health_app.router.add_get("/healthz", health_check)
 
     runner = web.AppRunner(health_app)
@@ -181,6 +182,7 @@ def _create_webhook_app() -> web.Application:
     dp.shutdown.register(_on_shutdown_webhook)
 
     app = web.Application()
+    app.router.add_get("/", index_handler)
     app.router.add_get("/healthz", health_check)
 
     webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
@@ -191,8 +193,12 @@ def _create_webhook_app() -> web.Application:
 
 
 # ---------------------------------------------------------------------------
-# Health-check endpoint (shared)
+# Health-check & Index endpoints (shared)
 # ---------------------------------------------------------------------------
+
+async def index_handler(request: web.Request) -> web.Response:
+    return web.Response(text="bot is running", content_type="text/plain")
+
 
 async def health_check(request: web.Request) -> web.Response:
     mode = "webhook" if USE_WEBHOOK else "polling"
