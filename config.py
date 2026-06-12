@@ -14,8 +14,9 @@ WEBAPP_PORT = int(os.getenv("BOT_PORT", 8099))
 
 FIREBASE_CREDENTIALS_PATH = os.getenv(
     "FIREBASE_CREDENTIALS_PATH",
-    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "firebase_credentials.json")
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebase_credentials.json")
 )
+
 
 # Economy
 WELCOME_BONUS = 500

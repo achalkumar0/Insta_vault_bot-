@@ -22,8 +22,14 @@ def init_firebase() -> AsyncClient:
     if _db is not None:
         return _db
 
-    creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "../firebase_credentials.json")
-    abs_path = os.path.abspath(creds_path)
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    default_path = os.path.join(project_root, "firebase_credentials.json")
+    creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH", default_path)
+    
+    if os.path.isabs(creds_path):
+        abs_path = os.path.abspath(creds_path)
+    else:
+        abs_path = os.path.abspath(os.path.join(project_root, creds_path))
 
     if not os.path.exists(abs_path):
         raise FileNotFoundError(

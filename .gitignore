@@ -5,3 +5,8 @@ __pycache__/
 firebase_credentials.json
 *.json
 .DS_Store
+.vscode/
+settings.json
+*.md
+bot.log
+manage_bot.sh
