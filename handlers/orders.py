@@ -12,6 +12,10 @@ Phase 3 consolidation:
 """
 
 import logging
+import re
+import secrets
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -23,6 +27,7 @@ from database.db_manager import (
     place_order_transactional,
     InsufficientSparksError,
     UserNotFoundError,
+    DuplicateOrderError,
 )
 from keyboards.inline import (
     confirm_order_keyboard,
@@ -32,6 +37,10 @@ from keyboards.inline import (
 
 logger = logging.getLogger(__name__)
 router = Router(name="orders")
+
+class OrderState(StatesGroup):
+    waiting_for_link = State()
+
 
 # ---------------------------------------------------------------------------
 # Callback → package_type mapping (underscore format, Phase 3 standard)
@@ -58,7 +67,7 @@ _PKG_DISPLAY: dict[str, str] = {
 @router.message(Command("order"))
 @router.message(F.text == "📦 Order Views")
 async def cmd_order(message: Message) -> None:
-    """Show the package selection menu (with IG handle guard)."""
+    """Show the package selection menu."""
     user = message.from_user
     if not user:
         return
@@ -69,15 +78,6 @@ async def cmd_order(message: Message) -> None:
         return
 
     sparks = user_data.get("spark_balance", 0)
-    ig = user_data.get("instagram_handle")
-
-    if not ig:
-        await message.answer(
-            "📸 <b>Instagram handle not set!</b>\n\n"
-            "Please link your Instagram in 👤 <b>Profile</b> before ordering.",
-        )
-        return
-
     if sparks < 500:
         await message.answer(
             "😅 <b>Yaar, Sparks thode kam hain!</b>\n\n"
@@ -103,8 +103,8 @@ async def cmd_order(message: Message) -> None:
 # ---------------------------------------------------------------------------
 
 @router.callback_query(F.data.in_(_PKG_CALLBACK_MAP))
-async def cb_select_package(query: CallbackQuery) -> None:
-    """User tapped a package — show confirmation with cost breakdown."""
+async def cb_select_package(query: CallbackQuery, state: FSMContext) -> None:
+    """User tapped a package — ask for Instagram link."""
     await query.answer()
     package_type = _PKG_CALLBACK_MAP[query.data]
 
@@ -131,14 +131,50 @@ async def cb_select_package(query: CallbackQuery) -> None:
         )
         return
 
+    await state.update_data(package_type=package_type)
+    await state.set_state(OrderState.waiting_for_link)
     await query.message.edit_text(
+        f"🔗 <b>Link Daalo</b>\n\n"
+        f"Package: <b>{display_name}</b>\n\n"
+        f"Apni Instagram Reel ya Post ka link yahan bhejo:\n"
+        f"<i>(Link must contain instagram.com and start with http/https)</i>"
+    )
+
+@router.message(OrderState.waiting_for_link)
+async def handle_order_link(message: Message, state: FSMContext) -> None:
+    text = (message.text or "").strip()
+    if text.lower() in ["/cancel", "cancel"]:
+        await state.clear()
+        await message.answer("❌ Order cancelled.")
+        return
+
+    if not re.match(r'^https?://.*instagram\.com.*', text, re.IGNORECASE):
+        await message.answer("⚠️ <b>Invalid Link.</b> Please provide a valid Instagram post/reel link starting with http:// or https://")
+        return
+
+    data = await state.get_data()
+    package_type = data.get("package_type")
+    if not package_type:
+        await state.clear()
+        await message.answer("⚠️ Session expired. Please try ordering again.")
+        return
+
+    pkg = PACKAGES.get(package_type)
+    user_data = await get_user(message.from_user.id)
+    sparks = user_data.get("spark_balance", 0) if user_data else 0
+    display_name = _PKG_DISPLAY.get(package_type, package_type.title())
+    nonce = secrets.token_hex(4)
+
+    await state.update_data(instagram_url=text)
+    
+    await message.answer(
         f"🛒 <b>Order Confirmation</b>\n\n"
         f"Package: <b>{display_name}</b>\n"
         f"Views: <b>{pkg['views']:,}</b>\n"
         f"Cost: <b>{pkg['sparks']:,} Sparks</b>\n"
         f"Balance After: <b>{sparks - pkg['sparks']:,} Sparks</b>\n\n"
         f"Confirm your order?",
-        reply_markup=confirm_order_keyboard(package_type),
+        reply_markup=confirm_order_keyboard(package_type, nonce),
     )
 
 
@@ -147,13 +183,15 @@ async def cb_select_package(query: CallbackQuery) -> None:
 # ---------------------------------------------------------------------------
 
 @router.callback_query(F.data.startswith("order_confirm:"))
-async def cb_confirm_order(query: CallbackQuery) -> None:
+async def cb_confirm_order(query: CallbackQuery, state: FSMContext) -> None:
     """
     Confirm order: deduct Sparks, create Firestore order document.
     Full delivery tracking will be implemented in Phase 5.
     """
     await query.answer("⏳ Processing…", show_alert=False)
-    package_type = query.data.split(":")[1]
+    parts = query.data.split(":")
+    package_type = parts[1]
+    nonce = parts[2] if len(parts) > 2 else ""
 
     pkg = PACKAGES.get(package_type)
     if not pkg:
@@ -161,8 +199,9 @@ async def cb_confirm_order(query: CallbackQuery) -> None:
         return
 
     user_id = query.from_user.id
-    user_data = await get_user(user_id)
-    ig = (user_data or {}).get("instagram_handle", "")
+    data = await state.get_data()
+    ig_url = data.get("instagram_url", "")
+    await state.clear()
 
     try:
         order_id = await place_order_transactional(
@@ -170,13 +209,19 @@ async def cb_confirm_order(query: CallbackQuery) -> None:
             package_type=package_type,
             sparks_spent=pkg["sparks"],
             views_ordered=pkg["views"],
-            instagram_url=ig or "",
+            instagram_url=ig_url,
+            nonce=nonce,
         )
     except InsufficientSparksError:
         await query.message.edit_text(
             "❌ <b>Insufficient Sparks.</b>\n\nYour balance may have changed. Please try again.",
             reply_markup=order_keyboard_empty(),
         )
+        return
+    except DuplicateOrderError:
+        await query.answer("⚠️ Order already processed!", show_alert=True)
+        # Optionally, edit text to reflect it was already processed
+        await query.message.edit_text("✅ This order has already been processed successfully.")
         return
     except UserNotFoundError:
         await query.message.edit_text(

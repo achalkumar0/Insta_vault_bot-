@@ -225,79 +225,52 @@ async def cb_beat_3(query: CallbackQuery, state: FSMContext) -> None:
     username: str | None = fsm_data.get("username") or query.from_user.username
     start_ts: int = fsm_data.get("start_ts") or int(time.time() * 1000)
 
-    # ── Segmentation calculations ─────────────────────────────────────────
     now = get_ist_now()
     action_speed_ms = int(time.time() * 1000) - start_ts
     onboarding_time = _time_slot(now.hour)
-    source_tag = referred_by if referred_by else "direct"
+    
+    referrer_uid = None
+    actual_source_tag = "direct"
+    
+    if referred_by_raw and referred_by_raw.startswith("ref_"):
+        from database.db_manager import get_user_by_referral_code
+        referrer_data = await get_user_by_referral_code(referred_by_raw)
+        if referrer_data:
+            referrer_uid = referrer_data["_uid"]
+            actual_source_tag = "referral"
 
-    # ── Guard: idempotent — don't double-create on double-tap ─────────────
-    is_new_user = not await user_exists(user_id)
-    if is_new_user:
-        await create_user(
+    from database.db_manager import create_user_transactional
+    import config
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        created_user = await create_user_transactional(
             user_id=user_id,
             first_name=first_name,
             username=username,
-            referred_by=referred_by,
-            source_tag=source_tag,
+            referrer_uid=referrer_uid,
+            source_tag=actual_source_tag,
             onboarding_time=onboarding_time,
             action_speed_ms=action_speed_ms,
         )
-        await log_transaction(
-            user_id=user_id,
-            tx_type="bonus",
-            amount=500,
-            source="welcome_bonus",
-        )
-        logger.info(
-            "User %s created | speed=%dms | slot=%s | source=%s",
-            user_id,
-            action_speed_ms,
-            onboarding_time,
-            source_tag,
-        )
 
-        # ── Referral Reward Engine ─────────────────────────────────────────
-        if referred_by and referred_by.startswith("ref_"):
-            referrer_data = await get_user_by_referral_code(referred_by)
-            if referrer_data:
-                referrer_uid = referrer_data["_uid"]
-                # Overwrite the raw referral code with the actual referrer's user_id
-                await update_user(user_id, {"referred_by": referrer_uid})
-                # Atomic Sparks + referral_count increment for referrer
-                await reward_referrer(referrer_uid)
-                # Transaction log for referrer
-                await log_transaction(
-                    user_id=referrer_uid,
-                    tx_type="referral",
-                    amount=500,
-                    source=f"referral_bonus_{user_id}",
-                )
-                # Referee bonus — extra Sparks for the new user who joined via link
-                await increment_spark_balance(user_id, REFEREE_BONUS)
-                await log_transaction(
-                    user_id=user_id,
-                    tx_type="bonus",
-                    amount=REFEREE_BONUS,
-                    source=f"referee_bonus_{referrer_uid}",
-                )
-                logger.info(
-                    "Referral resolved: new user %s referred by %s | referee +%d Sparks",
-                    user_id,
-                    referrer_uid,
-                    REFEREE_BONUS,
-                )
-                # Live notification to referrer (gracefully handles blocked bot)
+        if created_user:
+            logger.info("User %s created | speed=%dms | source=%s", user_id, action_speed_ms, actual_source_tag)
+            if referrer_uid:
                 try:
                     await query.bot.send_message(
                         int(referrer_uid),
                         "🎉 <b>Badaai ho!</b> Kisi ne tumhare link se InstaVault join kiya hai.\n"
-                        "⚡ Tumhare account mein <b>500 Sparks</b> add ho gaye hain!",
+                        f"⚡ Tumhare account mein <b>{config.REFERRAL_JOIN_BONUS} Sparks</b> add ho gaye hain!",
+                        parse_mode="HTML"
                     )
                 except Exception as notify_err:
-                    logger.warning(
-                        "Could not notify referrer %s: %s", referrer_uid, notify_err
-                    )
+                    logger.warning("Could not notify referrer %s: %s", referrer_uid, notify_err)
+    except Exception as db_err:
+        logger.error("Failed to create user %s: %s", user_id, db_err, exc_info=True)
+        await query.message.edit_text("⚠️ Account creation failed due to a server error. Please try again later.")
+        return
 
     await state.clear()
 

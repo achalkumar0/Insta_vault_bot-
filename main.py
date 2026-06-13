@@ -115,7 +115,7 @@ async def _run_polling() -> None:
 
     # Delete any stale webhook so polling works cleanly
     try:
-        await bot.delete_webhook(drop_pending_updates=True)
+        await bot.delete_webhook(drop_pending_updates=False)
         logger.info("Stale webhook cleared — switching to polling mode.")
     except Exception as e:
         logger.warning("Could not clear webhook: %s", e)
@@ -133,7 +133,7 @@ async def _run_polling() -> None:
 
     logger.info("🔄 Polling mode active — bot is listening for updates.")
     try:
-        await dp.start_polling(bot, drop_pending_updates=True)
+        await dp.start_polling(bot, drop_pending_updates=False)
     finally:
         await runner.cleanup()
         await bot.session.close()
@@ -154,7 +154,7 @@ async def _on_startup_webhook(bot: Bot) -> None:
 
     webhook_full_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
     try:
-        await bot.set_webhook(url=webhook_full_url, drop_pending_updates=True)
+        await bot.set_webhook(url=webhook_full_url, drop_pending_updates=False)
         logger.info("✅ Webhook set: %s", webhook_full_url)
     except Exception as e:
         logger.error("Failed to set webhook: %s", e)
@@ -163,7 +163,7 @@ async def _on_startup_webhook(bot: Bot) -> None:
 async def _on_shutdown_webhook(bot: Bot) -> None:
     """Called by aiogram before the aiohttp server stops."""
     try:
-        await bot.delete_webhook(drop_pending_updates=True)
+        await bot.delete_webhook(drop_pending_updates=False)
         logger.info("Webhook deleted.")
     except Exception as e:
         logger.error("Error deleting webhook: %s", e)

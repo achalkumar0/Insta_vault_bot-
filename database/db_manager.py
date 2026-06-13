@@ -17,6 +17,18 @@ from google.cloud.firestore import Increment, async_transactional
 from google.cloud.firestore_v1 import AsyncDocumentReference
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+import config
+from database.firebase_init import get_db
+
+USERS_COL = "users"
+ORDERS_COL = "orders"
+
+from utils.helpers import generate_referral_code, generate_vault_id, get_ist_now
+
+
+
+class DuplicateOrderError(Exception):
+    pass
 
 class InsufficientSparksError(Exception):
     """Raised when a user doesn't have enough Sparks for an operation."""
@@ -31,31 +43,6 @@ class UserNotFoundError(Exception):
 class CooldownActiveError(Exception):
     """Raised when a user attempts to open a mystery box during cooldown."""
     pass
-
-
-class MaxShieldsReachedError(Exception):
-    """Raised when a user already has the maximum allowed streak shields."""
-    pass
-
-
-import config
-from database.firebase_init import get_db
-from utils.helpers import (
-    generate_referral_code,
-    generate_vault_id,
-    get_ist_now,
-    get_rank_tier,
-)
-
-logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Collection names
-# ---------------------------------------------------------------------------
-USERS_COL = "users"
-ORDERS_COL = "orders"
-TRANSACTIONS_COL = "transactions"
-WAITLIST_COL = "waitlist"
 
 
 # ===========================================================================
@@ -96,7 +83,7 @@ async def create_user(
     db = get_db()
     now = get_ist_now()
 
-    vault_id = generate_vault_id(user_id % 100000)
+    vault_id = generate_vault_id(user_id)
     referral_code = generate_referral_code(vault_id)
 
     user_data: dict[str, Any] = {
@@ -191,6 +178,73 @@ async def deduct_spark_balance(user_id: int | str, amount: int) -> None:
 async def update_last_login(user_id: int | str) -> None:
     """Stamp last_login with the current IST datetime."""
     await update_user(user_id, {"last_login": get_ist_now()})
+
+
+@async_transactional
+async def _process_streak_milestone_txn(
+    transaction,
+    user_ref: AsyncDocumentReference,
+    tx_ref: AsyncDocumentReference,
+    new_streak: int,
+    milestone_bonus: int,
+    now_ist: str,
+    shield_used: bool,
+    shields: int,
+    user_id: int | str
+) -> None:
+    update_fields: dict[str, Any] = {
+        "streak_days": new_streak,
+        "last_login": now_ist,
+    }
+    if shield_used:
+        update_fields["streak_shields"] = shields - 1
+
+    if milestone_bonus > 0:
+        update_fields["spark_balance"] = Increment(milestone_bonus)
+        update_fields["lifetime_sparks"] = Increment(milestone_bonus)
+
+    # Note: Using update because the document must already exist
+    transaction.update(user_ref, update_fields)
+
+    if milestone_bonus > 0:
+        tx_data = {
+            "user_id": str(user_id),
+            "type": "bonus",
+            "amount": milestone_bonus,
+            "source": f"streak_milestone_day_{new_streak}",
+            "created_at": now_ist,
+        }
+        transaction.set(tx_ref, tx_data)
+
+
+async def process_streak_milestone_transactional(
+    user_id: int | str,
+    new_streak: int,
+    milestone_bonus: int,
+    now_ist: str,
+    shield_used: bool,
+    shields: int,
+) -> None:
+    """
+    Atomically updates streak details, deducts shield, increments spark balance,
+    and logs the transaction in a single Firestore transaction.
+    """
+    db = get_db()
+    transaction = db.transaction()
+    user_ref = db.collection(USERS_COL).document(str(user_id))
+    tx_ref = db.collection(TRANSACTIONS_COL).document()
+
+    await _process_streak_milestone_txn(
+        transaction,
+        user_ref,
+        tx_ref,
+        new_streak,
+        milestone_bonus,
+        now_ist,
+        shield_used,
+        shields,
+        user_id
+    )
 
 
 # ===========================================================================
@@ -292,6 +346,7 @@ async def place_order_transactional(
     sparks_spent: int,
     views_ordered: int,
     instagram_url: str,
+    nonce: str,
 ) -> str:
     """
     Atomically verify user has enough balance, deduct Sparks, log the
@@ -301,6 +356,7 @@ async def place_order_transactional(
     Returns the generated order ID.
     Raises UserNotFoundError if user document does not exist.
     Raises InsufficientSparksError if the user's spark balance is too low.
+    Raises DuplicateOrderError if the nonce matches the last order's nonce.
     """
     db = get_db()
     transaction = db.transaction()
@@ -314,6 +370,10 @@ async def place_order_transactional(
             raise UserNotFoundError(f"User {user_id} not found in database.")
 
         user_data = user_snap.to_dict() or {}
+        
+        if user_data.get("last_order_nonce") == nonce:
+            raise DuplicateOrderError(f"Duplicate order: nonce {nonce} already processed.")
+
         current_balance = user_data.get("spark_balance", 0)
 
         if current_balance < sparks_spent:
@@ -350,11 +410,15 @@ async def place_order_transactional(
             "created_at": now,
         }
 
-        # Queue updates/writes in transaction
-        tx.update(user_ref, {
-            "spark_balance": new_balance,
-            "total_orders": new_total_orders
-        })
+        # 1. Update user: deduct balance, inc total_orders, update nonce
+        tx.update(
+            user_ref,
+            {
+                "spark_balance": new_balance,
+                "total_orders": new_total_orders,
+                "last_order_nonce": nonce,
+            },
+        )
         tx.set(order_ref, order_data)
         tx.set(tx_ref, tx_data)
 
@@ -656,3 +720,67 @@ async def update_waitlist_entry(user_id: int | str, fields: dict[str, Any]) -> N
 async def activate_waitlist_user(user_id: int | str) -> None:
     """Mark a waitlist user as activated."""
     await update_waitlist_entry(user_id, {"activated": True})
+
+
+@async_transactional
+async def _create_user_tx(tx, user_ref, user_id, first_name, username, vault_id, referral_code, now, referrer_uid, source_tag, onboarding_time, action_speed_ms):
+    user_snap = await user_ref.get(transaction=tx)
+    if user_snap.exists:
+        return None
+
+    import config
+    from google.cloud.firestore import Increment
+    
+    initial_sparks = config.WELCOME_BONUS
+    if referrer_uid:
+        initial_sparks += config.REFEREE_BONUS
+
+    user_data = {
+        "first_name": first_name, "username": username or "", "vault_id": vault_id,
+        "join_date": now, "status": "active", "spark_balance": initial_sparks,
+        "lifetime_sparks": initial_sparks, "rank_points": 0, "rank_tier": "Rookie Vaulter",
+        "streak_days": 1, "last_login": now, "streak_shields": 0, "last_daily_reset": now,
+        "daily_level_count": 0, "daily_limit": 1, "last_mystery_box_date": None,
+        "referral_code": referral_code, "referred_by": referrer_uid, "referral_count": 0,
+        "total_orders": 0, "total_views_recv": 0, "instagram_handle": None,
+        "first_order_date": None, "last_order_nonce": None, "power_score": 0,
+        "jackpot_tickets": 0, "notif_preference": "all", "is_vip_member": False,
+        "community_invited": False, "waitlist_pos": None, "source_tag": source_tag,
+        "onboarding_time": onboarding_time, "action_speed_ms": action_speed_ms,
+    }
+
+    tx.set(user_ref, user_data)
+    
+    db = get_db()
+    welcome_tx_ref = db.collection("transactions").document()
+    tx.set(welcome_tx_ref, {
+        "user_id": str(user_id), "type": "bonus", "amount": initial_sparks,
+        "source": f"welcome_bonus{'_and_referee' if referrer_uid else ''}", "created_at": now,
+    })
+
+    if referrer_uid:
+        referrer_ref = db.collection("users").document(referrer_uid)
+        tx.update(referrer_ref, {
+            "spark_balance": Increment(config.REFERRAL_JOIN_BONUS),
+            "lifetime_sparks": Increment(config.REFERRAL_JOIN_BONUS),
+            "referral_count": Increment(1),
+        })
+        referrer_tx_ref = db.collection("transactions").document()
+        tx.set(referrer_tx_ref, {
+            "user_id": str(referrer_uid), "type": "referral", "amount": config.REFERRAL_JOIN_BONUS,
+            "source": f"referral_bonus_{user_id}", "created_at": now,
+        })
+        user_data["_referrer_uid"] = referrer_uid
+
+    return user_data
+
+async def create_user_transactional(user_id: int, first_name: str, username: str | None = None, referrer_uid: str | None = None, source_tag: str = "direct", onboarding_time: str = "unknown", action_speed_ms: int = 0):
+    db = get_db()
+    transaction = db.transaction()
+    now = get_ist_now()
+    from utils.helpers import generate_vault_id, generate_referral_code
+    vault_id = generate_vault_id(user_id)
+    referral_code = generate_referral_code(vault_id)
+    user_ref = db.collection(USERS_COL).document(str(user_id))
+    return await _create_user_tx(transaction, user_ref, user_id, first_name, username, vault_id, referral_code, now, referrer_uid, source_tag, onboarding_time, action_speed_ms)
+

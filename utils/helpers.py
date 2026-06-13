@@ -33,14 +33,11 @@ def format_timestamp(dt: datetime | None, fmt: str = "%d %b %Y, %I:%M %p") -> st
 # Unique ID generators
 # ---------------------------------------------------------------------------
 
-def generate_vault_id(numeric_part: int | None = None) -> str:
+def generate_vault_id(user_id: int | str) -> str:
     """
-    Generate a Vault ID in the format VLT-XXXXX.
-    If numeric_part is provided (e.g. a counter), it is used; otherwise random.
+    Generate a Vault ID using the Telegram user_id.
     """
-    if numeric_part is not None:
-        return f"VLT-{numeric_part:05d}"
-    return f"VLT-{random.randint(10000, 99999)}"
+    return f"VLT-{user_id}"
 
 
 def generate_referral_code(vault_id: str) -> str:

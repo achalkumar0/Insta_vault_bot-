@@ -44,8 +44,6 @@ from database.db_manager import (
     open_mystery_box_transactional,
     CooldownActiveError,
     InsufficientSparksError,
-    buy_streak_shield_transactional,
-    MaxShieldsReachedError,
 )
 from keyboards.inline import (
     dashboard_keyboard,
@@ -82,139 +80,16 @@ def _clean_ig_handle(raw: str) -> str:
       @achal_123                                   →  achal_123
       achal_123                                    →  achal_123
     """
+    import html
     handle = raw.strip()
+    handle = html.unescape(handle)
     handle = re.sub(r"https?://(www\.)?instagram\.com/", "", handle, flags=re.IGNORECASE)
     handle = re.sub(r"[/?].*", "", handle)
     handle = handle.lstrip("@").strip()
+
+    if not re.match(r'^[A-Za-z0-9._]{1,30}$', handle):
+        return ""
     return handle
-
-
-# ---------------------------------------------------------------------------
-# Streak milestone config
-# ---------------------------------------------------------------------------
-STREAK_MILESTONES: dict[int, int] = {
-    3:  100,
-    7:  300,
-    14: 750,
-    30: 1500,
-}
-
-_IST = pytz.timezone("Asia/Kolkata")
-
-
-# ===========================================================================
-# PHASE 4 — Lazy Streak Engine
-# ===========================================================================
-
-async def _run_lazy_streak(
-    user_id: int,
-    user_data: dict[str, Any],
-    query: CallbackQuery | None = None,
-) -> tuple[dict[str, Any], bool]:
-    """
-    Evaluate and update the streak lazily on dashboard load.
-
-    Rules:
-      • Same calendar day (IST) → no change, no DB write.
-      • Consecutive day (diff == 1) → streak += 1.
-      • Missed ≥ 1 day (diff > 1) → streak reset to 1.
-
-    Milestone bonuses (days 3 / 7 / 14 / 30):
-      • Atomic Firestore Increment for the bonus Sparks.
-      • Popup alert sent via query.answer(show_alert=True) if callback context.
-
-    Returns:
-        (user_data, popup_was_shown)
-        popup_was_shown=True means query.answer() was already called here
-        with show_alert=True, so the caller must NOT call query.answer() again.
-    """
-    now_ist = get_ist_now()
-    today_ist = now_ist.date()
-
-    last_login_raw = user_data.get("last_login")
-    streak = int(user_data.get("streak_days", 1))
-    popup_shown = False
-
-    # Convert last_login (Firestore returns UTC-aware datetime) → IST date
-    last_login_date = None
-    if last_login_raw is not None:
-        try:
-            if hasattr(last_login_raw, "tzinfo") and last_login_raw.tzinfo:
-                last_login_date = last_login_raw.astimezone(_IST).date()
-            else:
-                last_login_date = pytz.utc.localize(last_login_raw).astimezone(_IST).date()
-        except Exception:
-            last_login_date = None
-
-    diff = (today_ist - last_login_date).days if last_login_date else 99
-
-    if diff == 0:
-        # Already visited today — nothing to do, query still needs answering
-        return user_data, popup_shown
-
-    # Determine new streak and shield usage
-    shield_used = False
-    shields = int(user_data.get("streak_shields", 0))
-
-    if diff == 1:
-        new_streak = streak + 1
-    elif diff == 2 and shields > 0:
-        new_streak = streak + 1
-        shield_used = True
-    else:
-        new_streak = 1
-
-    milestone_bonus = STREAK_MILESTONES.get(new_streak, 0)
-
-    update_fields: dict[str, Any] = {
-        "streak_days": new_streak,
-        "last_login": now_ist,
-    }
-    if shield_used:
-        update_fields["streak_shields"] = shields - 1
-
-    popup_messages = []
-    if shield_used:
-        popup_messages.append(
-            f"🛡️ Streak Shield Used!\n"
-            f"Kal login miss hua, par Streak Shield ne aapka streak bacha liya. "
-            f"Aaj Day {new_streak} hai!"
-        )
-
-    if milestone_bonus:
-        await increment_spark_balance(user_id, milestone_bonus)
-        await log_transaction(
-            user_id=user_id,
-            tx_type="bonus",
-            amount=milestone_bonus,
-            source=f"streak_milestone_day_{new_streak}",
-        )
-        logger.info(
-            "Streak milestone! User %s hit Day %s — bonus %s Sparks",
-            user_id, new_streak, milestone_bonus,
-        )
-        popup_messages.append(
-            f"🔥 Streak Bonus! Day {new_streak} — +{milestone_bonus} Sparks! 🎉"
-        )
-
-    # Answer query with popup BEFORE returning — caller must not answer again
-    if popup_messages and query is not None:
-        await query.answer("\n\n".join(popup_messages), show_alert=True)
-        popup_shown = True
-
-    await update_user(user_id, update_fields)
-
-    # Mutate local dict so caller sees fresh values without a second Firestore read
-    user_data["streak_days"] = new_streak
-    user_data["last_login"] = now_ist
-    if shield_used:
-        user_data["streak_shields"] = shields - 1
-    if milestone_bonus:
-        user_data["spark_balance"] = (
-            int(user_data.get("spark_balance", 0)) + milestone_bonus
-        )
-
-    return user_data, popup_shown
 
 
 # ===========================================================================
@@ -229,14 +104,7 @@ async def show_dashboard(
     query: CallbackQuery | None = None,
 ) -> None:
     """
-    Render the dashboard with lazy streak evaluation.
-
-    Args:
-        edit:  True → edit existing message in-place (callback nav).
-               False → send a new message (command or post-onboarding).
-        query: Originating CallbackQuery. This function answers it exactly once:
-               either via a milestone popup inside _run_lazy_streak, or with a
-               silent query.answer() after rendering.
+    Render the dashboard.
     """
     user_data = await get_user(user_id)
     if user_data is None:
@@ -249,12 +117,8 @@ async def show_dashboard(
             await message.answer(err)
         return
 
-    # Run lazy streak — returns whether a popup was already sent
-    user_data, popup_shown = await _run_lazy_streak(user_id, user_data, query=query)
-
     sparks = user_data.get("spark_balance", 0)
     rank   = user_data.get("rank_tier", "Rookie Vaulter")
-    streak = user_data.get("streak_days", 0)
     views  = user_data.get("total_views_recv", 0)
 
     text = (
@@ -264,7 +128,6 @@ async def show_dashboard(
         f"Namaste, <b>{first_name}</b> 👋\n\n"
         f"🪙 Balance:      <b>{sparks:,} Sparks</b>\n"
         f"⚡ Rank:         <b>{rank}</b>\n"
-        f"🔥 Streak:       <b>Day {streak}</b> <i>(kal toot jayega!)</i>\n"
         f"📦 Total Views:  <b>{views:,} delivered</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
         "🔴 <b>LIVE ALERT:</b> Aaj ka Mission complete karo aur Sparks kamao!\n"
@@ -276,8 +139,7 @@ async def show_dashboard(
     else:
         await message.answer(text, reply_markup=dashboard_keyboard())
 
-    # Answer the query exactly once — only if a popup hasn't already answered it
-    if query is not None and not popup_shown:
+    if query is not None:
         await query.answer()
 
 
@@ -343,18 +205,6 @@ async def cb_nav_order(query: CallbackQuery) -> None:
     if query.message is None:
         return
     user_id = query.from_user.id
-    user_data = await get_user(user_id)
-    ig = (user_data or {}).get("instagram_handle")
-    if not ig:
-        await query.message.edit_text(
-            "📸 <b>Instagram handle not set!</b>\n\n"
-            "Please link your Instagram in 👤 <b>Profile</b> before ordering.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="👤 Link Instagram", callback_data="nav_profile")],
-                [InlineKeyboardButton(text="⬅️ Dashboard", callback_data="go_dashboard")],
-            ]),
-        )
-        return
     await _render_order_screen(user_id, query.message, edit=True)
 
 
@@ -611,9 +461,11 @@ async def cb_nav_leaderboard(query: CallbackQuery) -> None:
         "",
     ]
 
+    import html
     for i, user in enumerate(top_users, start=1):
         medal  = _RANK_MEDALS.get(i, f"{i}.")
-        name   = user.get("first_name") or "Anonymous"
+        raw_name = user.get("first_name") or "Anonymous"
+        name   = html.escape(raw_name)
         sparks = int(user.get("spark_balance", 0))
         lines.append(f"{medal} {name} — <b>{sparks:,} ⚡</b>")
 
@@ -776,73 +628,6 @@ async def cb_coming_soon(query: CallbackQuery) -> None:
     await query.answer("🚧 Coming soon! Yeh feature Phase 5 mein aayega.", show_alert=True)
 
 
-@router.callback_query(F.data == "action_buy_shield")
-async def cb_buy_shield(query: CallbackQuery) -> None:
-    """Buy a Streak Shield handler."""
-    if query.message is None:
-        await query.answer()
-        return
-
-    user_id = query.from_user.id
-    try:
-        new_shields, new_balance = await buy_streak_shield_transactional(
-            user_id=user_id,
-            cost_sparks=200,
-            max_shields=3,
-        )
-        await query.answer(
-            f"🛡️ Streak Shield Purchased!\n\n"
-            f"Aapne successfully 1 Streak Shield buy kiya hai.\n"
-            f"Deducted: -200 Sparks\n"
-            f"New Balance: {new_balance:,} Sparks",
-            show_alert=True
-        )
-        # Re-render the rewards screen with updated shields
-        await _render_rewards_screen(user_id, query.message, edit=True)
-    except InsufficientSparksError:
-        await query.answer(
-            "❌ Insufficient Sparks!\n\n"
-            "Streak Shield buy karne ke liye 200 Sparks chahiye. "
-            "Daily Missions complete karke Sparks kamaein!",
-            show_alert=True
-        )
-    except MaxShieldsReachedError:
-        await query.answer(
-            "❌ Max Shields Reached!\n\n"
-            "Aap maximum 3 Streak Shields hi rakh sakte hain.",
-            show_alert=True
-        )
-    except Exception as e:
-        logger.error("Error purchasing streak shield: %s", e)
-        await query.answer(
-            "⚠️ Error while buying Streak Shield. Please try again later.",
-            show_alert=True
-        )
-
-
-@router.callback_query(F.data == "action_shields_full")
-async def cb_shields_full(query: CallbackQuery) -> None:
-    """Show alert when user already has maximum shields."""
-    await query.answer(
-        "🛡️ Streak Shields Limit Full!\n\n"
-        "Aapke paas already maximum (3/3) Streak Shields hain. "
-        "Inhe use hone ke baad hi aap aur buy kar payenge.",
-        show_alert=True
-    )
-
-
-@router.callback_query(F.data == "use_shield")
-async def cb_use_shield(query: CallbackQuery) -> None:
-    """Explain that shields are used automatically."""
-    await query.answer(
-        "🛡️ Automatic Streak Protection!\n\n"
-        "Streak Shields ko manually activate karne ki zaroorat nahi hai. "
-        "Agar aap kisi din login nahi kar paate, toh system automatically "
-        "1 shield consume karke aapka streak reset hone se bacha lega!",
-        show_alert=True
-    )
-
-
 # ===========================================================================
 # PHASE 6 — Instagram Handle Linking (FSM)
 # ===========================================================================
@@ -885,6 +670,11 @@ async def handle_ig_input(message: Message, state: FSMContext) -> None:
                 inline_keyboard=[[InlineKeyboardButton(text="⬅️ Dashboard", callback_data="go_dashboard")]]
             ),
         )
+        return
+
+    # Block other bot commands from being captured as an IG handle
+    if raw.startswith("/"):
+        await message.answer("⚠️ Please send your Instagram handle, not a command. Type /cancel to exit.")
         return
 
     cleaned = _clean_ig_handle(raw)

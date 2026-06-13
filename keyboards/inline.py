@@ -319,14 +319,14 @@ def leaderboard_keyboard() -> InlineKeyboardMarkup:
 # Order confirmation keyboard (used by orders.py confirm flow)
 # ===========================================================================
 
-def confirm_order_keyboard(package_type: str) -> InlineKeyboardMarkup:
+def confirm_order_keyboard(package_type: str, nonce: str) -> InlineKeyboardMarkup:
     """Confirm / cancel an order before deducting Sparks."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="✅ Confirm Order",
-                    callback_data=f"order_confirm:{package_type}",
+                    callback_data=f"order_confirm:{package_type}:{nonce}",
                 ),
             ],
             [
