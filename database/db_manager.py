@@ -19,11 +19,20 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 import config
 from database.firebase_init import get_db
+from utils.helpers import generate_referral_code, generate_vault_id, get_ist_now
 
+# ---------------------------------------------------------------------------
+# Module logger
+# ---------------------------------------------------------------------------
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Firestore collection name constants
+# ---------------------------------------------------------------------------
 USERS_COL = "users"
 ORDERS_COL = "orders"
-
-from utils.helpers import generate_referral_code, generate_vault_id, get_ist_now
+TRANSACTIONS_COL = "transactions"
+WAITLIST_COL = "waitlist"
 
 
 
@@ -42,6 +51,11 @@ class UserNotFoundError(Exception):
 
 class CooldownActiveError(Exception):
     """Raised when a user attempts to open a mystery box during cooldown."""
+    pass
+
+
+class MaxShieldsReachedError(Exception):
+    """Raised when a user already has the maximum number of streak shields."""
     pass
 
 

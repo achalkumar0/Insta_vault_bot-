@@ -33,6 +33,7 @@ import config as _config
 from config import BOT_TOKEN, WEBAPP_HOST, WEBAPP_PORT, WEBHOOK_PATH, WEBHOOK_URL
 from database.firebase_init import init_firebase
 from handlers import main_menu, orders, referrals, start
+from middlewares.throttling import ThrottlingMiddleware
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -96,6 +97,11 @@ def _build_bot_and_dispatcher():
     dp.include_router(main_menu.router)
     dp.include_router(orders.router)
     dp.include_router(referrals.router)
+
+    # Anti-spam middleware — 3s cooldown on /start and account creation
+    throttle = ThrottlingMiddleware()
+    dp.message.outer_middleware(throttle)
+    dp.callback_query.outer_middleware(throttle)
 
     return bot, dp
 
