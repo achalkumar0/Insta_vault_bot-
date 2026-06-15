@@ -33,7 +33,6 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import config
 from config import REFEREE_BONUS
 from database.db_manager import (
-    create_user,
     get_user,
     get_user_by_referral_code,
     increment_spark_balance,
