@@ -30,6 +30,7 @@ from database.db_manager import (
     DuplicateOrderError,
 )
 from keyboards.inline import (
+    back_to_dashboard_keyboard,
     confirm_order_keyboard,
     order_keyboard_empty,
     order_keyboard_full,
@@ -236,7 +237,6 @@ async def cb_confirm_order(query: CallbackQuery, state: FSMContext) -> None:
         return
 
     display_name = _PKG_DISPLAY.get(package_type, package_type.title())
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
     await query.message.edit_text(
         f"✅ <b>Order Placed!</b>\n\n"
         f"Package: <b>{display_name}</b>\n"
@@ -244,9 +244,7 @@ async def cb_confirm_order(query: CallbackQuery, state: FSMContext) -> None:
         f"Order ID: <code>{order_id[:8]}…</code>\n\n"
         f"Views will be delivered within <b>45 minutes</b>. 🚀\n\n"
         f"<i>Full delivery tracking coming in Phase 5.</i>",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Dashboard", callback_data="go_dashboard")],
-        ]),
+        reply_markup=back_to_dashboard_keyboard(),
     )
 
 

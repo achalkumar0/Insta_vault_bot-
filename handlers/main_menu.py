@@ -22,12 +22,11 @@ Bug Fixes (P0/P1/P2):
   - P1: Duplicate /order and F.text handlers removed — orders.py owns those.
 """
 
+import html
 import logging
 import random
 import re
 from typing import Any
-
-import pytz
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -46,6 +45,7 @@ from database.db_manager import (
     InsufficientSparksError,
 )
 from keyboards.inline import (
+    back_to_dashboard_keyboard,
     dashboard_keyboard,
     help_keyboard,
     leaderboard_keyboard,
@@ -80,7 +80,6 @@ def _clean_ig_handle(raw: str) -> str:
       @achal_123                                   →  achal_123
       achal_123                                    →  achal_123
     """
-    import html
     handle = raw.strip()
     handle = html.unescape(handle)
     handle = re.sub(r"https?://(www\.)?instagram\.com/", "", handle, flags=re.IGNORECASE)
@@ -461,7 +460,6 @@ async def cb_nav_leaderboard(query: CallbackQuery) -> None:
         "",
     ]
 
-    import html
     for i, user in enumerate(top_users, start=1):
         medal  = _RANK_MEDALS.get(i, f"{i}.")
         raw_name = user.get("first_name") or "Anonymous"
@@ -666,9 +664,7 @@ async def handle_ig_input(message: Message, state: FSMContext) -> None:
         await state.clear()
         await message.answer(
             "❌ Instagram linking cancelled.",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="⬅️ Dashboard", callback_data="go_dashboard")]]
-            ),
+            reply_markup=back_to_dashboard_keyboard(),
         )
         return
 
@@ -694,9 +690,7 @@ async def handle_ig_input(message: Message, state: FSMContext) -> None:
     await message.answer(
         f"✅ <b>Tera Instagram handle (@{cleaned}) successfully link ho gaya hai</b> "
         f"aur database mein save ho chuka hai!",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Dashboard", callback_data="go_dashboard")]]
-        ),
+        reply_markup=back_to_dashboard_keyboard(),
     )
 
 
@@ -706,7 +700,5 @@ async def cmd_cancel_link(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
         "❌ Instagram linking cancelled.",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Dashboard", callback_data="go_dashboard")]]
-        ),
+        reply_markup=back_to_dashboard_keyboard(),
     )

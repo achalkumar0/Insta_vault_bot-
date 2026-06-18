@@ -301,6 +301,20 @@ def mystery_box_result_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def back_to_dashboard_keyboard() -> InlineKeyboardMarkup:
+    """Simple single-button keyboard to navigate back to the dashboard."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Dashboard",
+                    callback_data="go_dashboard",
+                )
+            ],
+        ]
+    )
+
+
 def leaderboard_keyboard() -> InlineKeyboardMarkup:
     """Leaderboard screen navigation."""
     return InlineKeyboardMarkup(

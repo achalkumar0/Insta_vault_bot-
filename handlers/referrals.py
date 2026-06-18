@@ -35,7 +35,6 @@ async def cmd_refer(message: Message) -> None:
 
     referral_code = user_data.get("referral_code", "—")
     referral_count = user_data.get("referral_count", 0)
-    vault_id = user_data.get("vault_id", "—")
 
     deep_link = f"https://t.me/{config.BOT_USERNAME}?start={referral_code}"
 

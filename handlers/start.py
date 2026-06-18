@@ -28,11 +28,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
 from config import REFEREE_BONUS
 from database.db_manager import (
+    create_user_transactional,
     get_user,
     get_user_by_referral_code,
     increment_spark_balance,
@@ -232,16 +232,10 @@ async def cb_beat_3(query: CallbackQuery, state: FSMContext) -> None:
     actual_source_tag = "direct"
     
     if referred_by_raw and referred_by_raw.startswith("ref_"):
-        from database.db_manager import get_user_by_referral_code
         referrer_data = await get_user_by_referral_code(referred_by_raw)
         if referrer_data:
             referrer_uid = referrer_data["_uid"]
             actual_source_tag = "referral"
-
-    from database.db_manager import create_user_transactional
-    import config
-    import logging
-    logger = logging.getLogger(__name__)
     
     try:
         created_user = await create_user_transactional(

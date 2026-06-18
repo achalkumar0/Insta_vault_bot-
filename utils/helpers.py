@@ -1,12 +1,20 @@
-import random
-import string
-import asyncio
+"""
+utils/helpers.py
+~~~~~~~~~~~~~~~~
+Shared utility functions used across the InstaVault Bot project.
+
+Responsibilities:
+  - Timezone-aware datetime helpers (IST by default)
+  - Deterministic ID generators (Vault ID, referral codes)
+  - Rank tier calculation from rank points
+  - Streak-based daily order limit lookup
+"""
+
 from datetime import datetime
-from functools import partial
 
 import pytz
 
-from config import TIMEZONE
+from config import DAILY_LIMITS, TIMEZONE
 
 
 # ---------------------------------------------------------------------------
@@ -49,30 +57,6 @@ def generate_referral_code(vault_id: str) -> str:
     return f"ref_{stripped}"
 
 
-def generate_short_code(length: int = 8) -> str:
-    """Generate a random alphanumeric code (fallback / misc use)."""
-    chars = string.ascii_uppercase + string.digits
-    return "".join(random.choices(chars, k=length))
-
-
-# ---------------------------------------------------------------------------
-# Async executor helper
-# ---------------------------------------------------------------------------
-
-async def run_sync(func, *args, **kwargs):
-    """
-    Run a synchronous (blocking) function inside the default thread executor
-    so it does not block the asyncio event loop.
-
-    Usage:
-        result = await run_sync(some_blocking_call, arg1, arg2)
-    """
-    loop = asyncio.get_running_loop()
-    if kwargs:
-        return await loop.run_in_executor(None, partial(func, *args, **kwargs))
-    return await loop.run_in_executor(None, func, *args)
-
-
 # ---------------------------------------------------------------------------
 # Spark / rank helpers
 # ---------------------------------------------------------------------------
@@ -100,7 +84,6 @@ def get_daily_limit(streak_days: int) -> int:
     Return the daily order limit based on streak days.
     DAILY_LIMITS keys are minimum streak thresholds.
     """
-    from config import DAILY_LIMITS
     limit = 1
     for min_streak, allowed in sorted(DAILY_LIMITS.items()):
         if streak_days >= min_streak:
