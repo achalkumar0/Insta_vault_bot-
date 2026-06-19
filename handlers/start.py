@@ -64,20 +64,6 @@ class OnboardingState(StatesGroup):
 
 
 # ---------------------------------------------------------------------------
-# Segmentation helpers
-# ---------------------------------------------------------------------------
-
-def _time_slot(hour: int) -> str:
-    """Categorise an IST hour into a named time slot."""
-    if 5 <= hour < 12:
-        return "morning"
-    elif 12 <= hour < 17:
-        return "afternoon"
-    elif 17 <= hour < 22:
-        return "evening"
-    else:
-        return "night"
-
 
 # ---------------------------------------------------------------------------
 # Beat 1 — /start (no DB write)
@@ -225,8 +211,7 @@ async def cb_beat_3(query: CallbackQuery, state: FSMContext) -> None:
     start_ts: int = fsm_data.get("start_ts") or int(time.time() * 1000)
 
     now = get_ist_now()
-    action_speed_ms = int(time.time() * 1000) - start_ts
-    onboarding_time = _time_slot(now.hour)
+
     
     referrer_uid = None
     actual_source_tag = "direct"
@@ -244,12 +229,11 @@ async def cb_beat_3(query: CallbackQuery, state: FSMContext) -> None:
             username=username,
             referrer_uid=referrer_uid,
             source_tag=actual_source_tag,
-            onboarding_time=onboarding_time,
-            action_speed_ms=action_speed_ms,
+
         )
 
         if created_user:
-            logger.info("User %s created | speed=%dms | source=%s", user_id, action_speed_ms, actual_source_tag)
+            logger.info("User %s created | source=%s", user_id, actual_source_tag)
             if referrer_uid:
                 try:
                     await query.bot.send_message(

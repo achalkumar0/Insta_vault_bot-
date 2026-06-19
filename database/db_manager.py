@@ -138,8 +138,6 @@ def _build_default_user_data(
     initial_sparks: int,
     referrer_uid: str | None,
     source_tag: str,
-    onboarding_time: str,
-    action_speed_ms: int,
 ) -> dict[str, Any]:
     """Build the default Firestore document for a newly created user.
 
@@ -199,8 +197,6 @@ def _build_default_user_data(
 
         # Segmentation
         "source_tag": source_tag,
-        "onboarding_time": onboarding_time,
-        "action_speed_ms": action_speed_ms,
     }
 
 
@@ -216,8 +212,6 @@ async def _create_user_tx(
     now: datetime,
     referrer_uid: str | None,
     source_tag: str,
-    onboarding_time: str,
-    action_speed_ms: int,
 ) -> dict[str, Any] | None:
     """Inner transactional function for atomic user creation + referral rewards.
 
@@ -244,8 +238,6 @@ async def _create_user_tx(
         initial_sparks=initial_sparks,
         referrer_uid=referrer_uid,
         source_tag=source_tag,
-        onboarding_time=onboarding_time,
-        action_speed_ms=action_speed_ms,
     )
     tx.set(user_ref, user_data)
 
@@ -290,8 +282,6 @@ async def create_user_transactional(
     username: str | None = None,
     referrer_uid: str | None = None,
     source_tag: str = "direct",
-    onboarding_time: str = "unknown",
-    action_speed_ms: int = 0,
 ) -> dict[str, Any] | None:
     """Create a new user account with full referral handling in a single
     Firestore transaction.
@@ -328,8 +318,6 @@ async def create_user_transactional(
         now,
         referrer_uid,
         source_tag,
-        onboarding_time,
-        action_speed_ms,
     )
 
 

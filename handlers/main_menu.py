@@ -27,6 +27,8 @@ import logging
 import random
 import re
 from typing import Any
+import config
+from dotenv import set_key
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -62,6 +64,28 @@ from utils.helpers import format_timestamp, get_ist_now
 
 logger = logging.getLogger(__name__)
 router = Router(name="main_menu")
+
+@router.message(F.document)
+async def handle_apk_upload(message: Message):
+    # Top 1% Security: Only allow admins to upload the APK if ADMIN_IDS is configured
+    if config.ADMIN_IDS and message.from_user.id not in config.ADMIN_IDS:
+        return
+
+    doc = message.document
+    if doc.file_name and doc.file_name.lower().endswith(".apk"):
+        file_id = doc.file_id
+        # Save to .env so it persists across restarts
+        set_key(".env", "APK_FILE_ID", file_id)
+        # Update running config so we don't need to restart
+        config.APK_FILE_ID = file_id
+        
+        await message.reply(
+            f"✅ <b>Awesome! APK Updated Successfully.</b>\n\n"
+            f"File ID has been saved to <code>.env</code>:\n<code>{file_id}</code>\n\n"
+            f"Users clicking the download button will now receive this APK automatically.",
+            parse_mode="HTML"
+        )
+
 
 
 # ---------------------------------------------------------------------------
@@ -609,7 +633,6 @@ async def cb_order_history_page(query: CallbackQuery) -> None:
 # ===========================================================================
 
 _COMING_SOON = {
-    "dummy_app_link",
     "order_pkg_mega",       # Mega package — Phase 5
     "contact_support",
     "faq",
@@ -624,6 +647,34 @@ _COMING_SOON = {
 @router.callback_query(F.data.in_(_COMING_SOON))
 async def cb_coming_soon(query: CallbackQuery) -> None:
     await query.answer("🚧 Coming soon! Yeh feature Phase 5 mein aayega.", show_alert=True)
+
+
+@router.callback_query(F.data == "action_download_apk")
+async def cb_action_download_apk(query: CallbackQuery) -> None:
+    """Send the APK to the user with a nice caption."""
+    # Top 1% interactive toast
+    await query.answer("⏳ Fetching the latest version for you...", show_alert=False)
+    
+    if not config.APK_FILE_ID:
+        await query.message.answer("🚧 Server is updating the APK. Please try again in a few hours.")
+        return
+        
+    caption = (
+        "📱 <b>InstaVault Application (Latest)</b>\n\n"
+        "✨ Enjoy a seamless and robust experience!\n"
+        "🔒 Secure, Fast, and Reliable.\n\n"
+        "Download and install the APK below 👇"
+    )
+    
+    try:
+        await query.message.answer_document(
+            document=config.APK_FILE_ID,
+            caption=caption,
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.error(f"Failed to send APK: {e}")
+        await query.message.answer("🚧 System is busy syncing the file. Please try again in a few minutes.")
 
 
 # ===========================================================================

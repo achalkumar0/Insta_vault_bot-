@@ -2,6 +2,9 @@ import os
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+APK_FILE_ID = os.getenv("APK_FILE_ID", "")
+ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
+
 # Auto-detect webhook URL: prefer explicit WEBHOOK_URL, fall back to Replit dev domain
 _replit_domain = os.getenv("REPLIT_DEV_DOMAIN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL") or (
@@ -10,7 +13,7 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL") or (
 
 WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}" if BOT_TOKEN else "/webhook/UNSET_TOKEN"
 WEBAPP_HOST = "0.0.0.0"
-WEBAPP_PORT = int(os.getenv("BOT_PORT", 8099))
+WEBAPP_PORT = int(os.getenv("PORT", os.getenv("BOT_PORT", 8099)))
 
 FIREBASE_CREDENTIALS_PATH = os.getenv(
     "FIREBASE_CREDENTIALS_PATH",

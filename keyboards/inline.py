@@ -26,7 +26,7 @@ def onboarding_beat1_keyboard(ref_code: str = "none") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Haan, mujhe Free Views chahiye! →",
+                    text="🚀 Get Free Views Now →",
                     callback_data=f"ob_beat_2:{ref_code}",
                 )
             ],
@@ -40,13 +40,13 @@ def onboarding_beat2_keyboard(ref_code: str = "none") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🎁 Apna Welcome Bonus Claim Karo",
+                    text="🎁 Claim Welcome Bonus",
                     callback_data=f"ob_beat_3:{ref_code}",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="📖 Yeh kya hota hai? (How it Works)",
+                    text="📖 How It Works",
                     callback_data=f"ob_how_it_works:{ref_code}",
                 )
             ],
@@ -60,19 +60,19 @@ def onboarding_beat3_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🚀 Aaj ka Mission Complete Karo",
+                    text="🚀 Complete Daily Mission",
                     callback_data="nav_mission",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="📊 Mera Dashboard",
+                    text="📊 Dashboard",
                     callback_data="nav_dashboard",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="🤝 Dost ko Refer Karo (Bonus Sparks)",
+                    text="🤝 Refer & Earn Bonus",
                     callback_data="nav_refer",
                 )
             ],
@@ -104,13 +104,13 @@ def dashboard_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🚀 Aaj ka Mission — 400 Sparks Kamao",
+                    text="🎯 Daily Mission (Earn 400 Sparks)",
                     callback_data="nav_mission",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="📦 Views Order Karo",
+                    text="📦 New Order",
                     callback_data="nav_order",
                 ),
                 InlineKeyboardButton(
@@ -120,11 +120,11 @@ def dashboard_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="📊 Mera Profile",
+                    text="👤 Profile",
                     callback_data="nav_profile",
                 ),
                 InlineKeyboardButton(
-                    text="🤝 Refer Karo",
+                    text="🤝 Refer & Earn",
                     callback_data="nav_refer",
                 ),
             ],
@@ -144,13 +144,13 @@ def mission_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🚀 App Mein Jaao (Coming Soon)",
-                    callback_data="dummy_app_link",
+                    text="⬇️ Download APK",
+                    callback_data="action_download_apk",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="⬅️ Dashboard pe Wapas",
+                    text="🏠 Back to Dashboard",
                     callback_data="go_dashboard",
                 )
             ],
@@ -185,7 +185,7 @@ def order_keyboard_full() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="⬅️ Dashboard",
+                    text="🏠 Back to Dashboard",
                     callback_data="go_dashboard",
                 )
             ],
@@ -199,7 +199,7 @@ def order_keyboard_empty() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🎯 Mission Karo — Sparks Kamao",
+                    text="🎯 Complete Missions & Earn",
                     callback_data="nav_mission",
                 )
             ],
@@ -211,7 +211,7 @@ def order_keyboard_empty() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="⬅️ Dashboard",
+                    text="🏠 Back to Dashboard",
                     callback_data="go_dashboard",
                 )
             ],
@@ -247,7 +247,7 @@ def rewards_keyboard(shields: int = 0) -> InlineKeyboardMarkup:
 
     buttons.append([
         InlineKeyboardButton(
-            text="⬅️ Dashboard",
+            text="🏠 Back to Dashboard",
             callback_data="go_dashboard",
         )
     ])
@@ -269,13 +269,13 @@ def profile_keyboard(ig_linked: bool = False) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="📦 Order History Dekho",
+                    text="📋 View Order History",
                     callback_data="nav_order_history",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="⬅️ Dashboard",
+                    text="🏠 Back to Dashboard",
                     callback_data="go_dashboard",
                 )
             ],
@@ -293,7 +293,7 @@ def mystery_box_result_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Dashboard",
+                    text="🏠 Back to Dashboard",
                     callback_data="go_dashboard",
                 )
             ],
@@ -307,7 +307,7 @@ def back_to_dashboard_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Dashboard",
+                    text="🏠 Back to Dashboard",
                     callback_data="go_dashboard",
                 )
             ],
@@ -321,7 +321,7 @@ def leaderboard_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Dashboard",
+                    text="🏠 Back to Dashboard",
                     callback_data="go_dashboard",
                 )
             ],
@@ -375,7 +375,7 @@ def referral_keyboard(referral_code: str) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="⬅️ Dashboard",
+                    text="🏠 Back to Dashboard",
                     callback_data="go_dashboard",
                 )
             ],
@@ -393,8 +393,8 @@ def order_history_keyboard(has_prev: bool = False, has_next: bool = False, page:
         nav_row.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"order_history_page:{page + 1}"))
     if nav_row:
         rows.append(nav_row)
-    rows.append([InlineKeyboardButton(text="⬅️ Profile", callback_data="nav_profile")])
-    rows.append([InlineKeyboardButton(text="🏠 Dashboard", callback_data="go_dashboard")])
+    rows.append([InlineKeyboardButton(text="👤 Profile", callback_data="nav_profile")])
+    rows.append([InlineKeyboardButton(text="🏠 Back to Dashboard", callback_data="go_dashboard")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -404,6 +404,6 @@ def help_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="💬 Contact Support", callback_data="contact_support")],
             [InlineKeyboardButton(text="📋 FAQ", callback_data="faq")],
-            [InlineKeyboardButton(text="⬅️ Dashboard", callback_data="go_dashboard")],
+            [InlineKeyboardButton(text="🏠 Back to Dashboard", callback_data="go_dashboard")],
         ]
     )
