@@ -30,11 +30,13 @@ class ThrottlingMiddleware(BaseMiddleware):
     def __init__(
         self,
         cooldown: float = 3.0,
+        micro_cooldown: float = 0.5,
         cleanup_interval: int = 100,
     ) -> None:
         self.cooldown = cooldown
+        self.micro_cooldown = micro_cooldown
         self.cleanup_interval = cleanup_interval
-        self._users: Dict[int, float] = {}
+        self._users: Dict[str, float] = {}
         self._event_counter: int = 0
 
     # ------------------------------------------------------------------
@@ -42,10 +44,10 @@ class ThrottlingMiddleware(BaseMiddleware):
     # ------------------------------------------------------------------
 
     def _cleanup(self, now: float) -> None:
-        """Remove entries older than the cooldown period."""
-        cutoff = now - self.cooldown
+        """Remove entries older than the maximum cooldown period."""
+        cutoff = now - max(self.cooldown, self.micro_cooldown)
         self._users = {
-            uid: ts for uid, ts in self._users.items() if ts >= cutoff
+            key: ts for key, ts in self._users.items() if ts >= cutoff
         }
 
     # ------------------------------------------------------------------
@@ -59,21 +61,27 @@ class ThrottlingMiddleware(BaseMiddleware):
         data: Dict[str, Any],
     ) -> Any:
         user_id: int | None = None
-        is_throttled_event = False
+        throttle_type: str | None = None
+        cooldown_to_apply: float = 0.0
 
         if isinstance(event, Message):
             if event.from_user:
                 user_id = event.from_user.id
             if event.text and event.text.startswith("/start"):
-                is_throttled_event = True
+                throttle_type = "macro"
+                cooldown_to_apply = self.cooldown
 
         elif isinstance(event, CallbackQuery):
             if event.from_user:
                 user_id = event.from_user.id
             if event.data and event.data.startswith("ob_beat_3"):
-                is_throttled_event = True
+                throttle_type = "macro"
+                cooldown_to_apply = self.cooldown
+            else:
+                throttle_type = "micro"
+                cooldown_to_apply = self.micro_cooldown
 
-        if is_throttled_event and user_id:
+        if throttle_type and user_id:
             now = time.time()
 
             # Periodic cleanup to bound memory usage
@@ -82,9 +90,10 @@ class ThrottlingMiddleware(BaseMiddleware):
                 self._cleanup(now)
                 self._event_counter = 0
 
-            if now - self._users.get(user_id, 0.0) < self.cooldown:
+            key = f"{user_id}:{throttle_type}"
+            if now - self._users.get(key, 0.0) < cooldown_to_apply:
                 return None
 
-            self._users[user_id] = now
+            self._users[key] = now
 
         return await handler(event, data)

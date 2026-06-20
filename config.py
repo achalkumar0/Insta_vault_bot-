@@ -1,25 +1,54 @@
 import os
+from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+class Settings(BaseSettings):
+    # Core Secrets (Strictly required, will crash if missing)
+    BOT_TOKEN: str
+    REDIS_URL: str
+    
+    # Optional / with defaults
+    APK_FILE_ID: str = ""
+    ADMIN_IDS: str = ""
+    
+    # Webhook & Server
+    REPLIT_DEV_DOMAIN: Optional[str] = None
+    WEBHOOK_URL: Optional[str] = None
+    BOT_PORT: int = 8099
+    PORT: Optional[int] = None
+    
+    # Firebase
+    FIREBASE_CREDENTIALS_PATH: str = "firebase_credentials.json"
+    
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-APK_FILE_ID = os.getenv("APK_FILE_ID", "")
-ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
+# Initialize the settings engine (Fail-Fast happens right here!)
+settings = Settings()
 
-# Auto-detect webhook URL: prefer explicit WEBHOOK_URL, fall back to Replit dev domain
-_replit_domain = os.getenv("REPLIT_DEV_DOMAIN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL") or (
+# ---------------------------------------------------------
+# Drop-in Replacements (100% backward compatibility)
+# ---------------------------------------------------------
+
+BOT_TOKEN = settings.BOT_TOKEN
+APK_FILE_ID = settings.APK_FILE_ID
+ADMIN_IDS = [int(x.strip()) for x in settings.ADMIN_IDS.split(",") if x.strip().isdigit()]
+
+REDIS_URL = settings.REDIS_URL
+
+_replit_domain = settings.REPLIT_DEV_DOMAIN
+WEBHOOK_URL = settings.WEBHOOK_URL or (
     f"https://{_replit_domain}" if _replit_domain else None
 )
 
-WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}" if BOT_TOKEN else "/webhook/UNSET_TOKEN"
+WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
 WEBAPP_HOST = "0.0.0.0"
-WEBAPP_PORT = int(os.getenv("PORT", os.getenv("BOT_PORT", 8099)))
+WEBAPP_PORT = settings.PORT if settings.PORT is not None else settings.BOT_PORT
 
-FIREBASE_CREDENTIALS_PATH = os.getenv(
-    "FIREBASE_CREDENTIALS_PATH",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebase_credentials.json")
-)
-
+FIREBASE_CREDENTIALS_PATH = settings.FIREBASE_CREDENTIALS_PATH
+if FIREBASE_CREDENTIALS_PATH == "firebase_credentials.json":
+    FIREBASE_CREDENTIALS_PATH = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "firebase_credentials.json"
+    )
 
 # Economy
 WELCOME_BONUS = 500
@@ -56,5 +85,5 @@ PASSIVE_MONTHLY_CAP = 500
 # Time
 TIMEZONE = "Asia/Kolkata"
 
-# Runtime cache — populated once at bot startup via bot.get_me()
+# Runtime cache
 BOT_USERNAME: str = ""

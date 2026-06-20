@@ -3,3 +3,7 @@ aiohttp==3.10.10
 firebase-admin==6.5.0
 python-dotenv==1.0.1
 pytz==2024.1
+redis==8.0.0
+upstash-redis==1.7.0
+pydantic==2.9.2
+pydantic-settings==2.14.2

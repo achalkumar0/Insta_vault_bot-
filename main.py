@@ -16,12 +16,6 @@ import asyncio
 import logging
 import os
 import sys
-
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
-
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -32,7 +26,8 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 import config as _config
 from config import BOT_TOKEN, WEBAPP_HOST, WEBAPP_PORT, WEBHOOK_PATH, WEBHOOK_URL
 from database.firebase_init import init_firebase
-from handlers import main_menu, orders, referrals, start
+from database.redis_manager import close_redis, init_redis
+from handlers import errors, main_menu, orders, referrals, start
 from middlewares.throttling import ThrottlingMiddleware
 
 # ---------------------------------------------------------------------------
@@ -47,7 +42,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Detect execution mode based on the presence of WEBHOOK_URL in environment
-USE_WEBHOOK = bool(os.getenv("WEBHOOK_URL"))
+USE_WEBHOOK = bool(WEBHOOK_URL)
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +72,13 @@ async def _verify_services(bot: Bot) -> None:
         logger.critical("❌ Firebase Database Connection FAILED: %s", e)
         sys.exit(1)
 
+    # 3. Verify Redis Connectivity
+    try:
+        await init_redis()
+    except Exception as e:
+        logger.critical("❌ Redis Initialization FAILED: %s", e)
+        sys.exit(1)
+
 
 # ---------------------------------------------------------------------------
 # Shared bot / dispatcher factory
@@ -93,6 +95,7 @@ def _build_bot_and_dispatcher():
     dp = Dispatcher(storage=MemoryStorage())
 
     # Register routers (most-specific first)
+    dp.include_router(errors.router)
     dp.include_router(start.router)
     dp.include_router(main_menu.router)
     dp.include_router(orders.router)
@@ -143,6 +146,7 @@ async def _run_polling() -> None:
     finally:
         await runner.cleanup()
         await bot.session.close()
+        await close_redis()
         logger.info("Bot session closed.")
 
 
@@ -175,6 +179,7 @@ async def _on_shutdown_webhook(bot: Bot) -> None:
         logger.error("Error deleting webhook: %s", e)
     finally:
         await bot.session.close()
+        await close_redis()
         logger.info("Bot session closed.")
 
 
