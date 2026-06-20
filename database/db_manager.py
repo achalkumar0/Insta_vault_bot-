@@ -25,7 +25,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from google.cloud.firestore import Increment, async_transactional
+from google.cloud.firestore import Increment, async_transactional, Query
 from google.cloud.firestore_v1 import AsyncDocumentReference
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -503,25 +503,31 @@ async def get_order(order_id: str) -> dict[str, Any] | None:
 async def get_user_orders(
     user_id: int | str,
     limit: int = 10,
+    page: int = 0,
 ) -> list[dict[str, Any]]:
     """Return the most recent orders for a user, newest first.
 
-    Sorting is done in Python to avoid requiring a Firestore composite
-    index on ``(user_id, created_at)``.
+    Uses Firestore native order_by and offset for pagination.
+    Note: Requires a Composite Index on (user_id ASC, created_at DESC).
     """
     db = get_db()
+    offset_val = page * limit
+
     query = (
         db.collection(ORDERS_COL)
         .where(filter=FieldFilter("user_id", "==", str(user_id)))
+        .order_by("created_at", direction=Query.DESCENDING)
+        .offset(offset_val)
+        .limit(limit)
     )
+
     results: list[dict[str, Any]] = []
     async for doc in query.stream():
         data = doc.to_dict()
         data["order_id"] = doc.id
         results.append(data)
 
-    results.sort(key=lambda d: d.get("created_at") or 0, reverse=True)
-    return results[:limit]
+    return results
 
 
 async def update_order_status(
@@ -571,7 +577,7 @@ async def place_order_transactional(
     @async_transactional
     async def _run_in_tx(tx) -> str:
         user_ref = db.collection(USERS_COL).document(str(user_id))
-        user_snap = await tx.get(user_ref)
+        user_snap = await user_ref.get(transaction=tx)
 
         if not user_snap.exists:
             raise UserNotFoundError(f"User {user_id} not found in database.")

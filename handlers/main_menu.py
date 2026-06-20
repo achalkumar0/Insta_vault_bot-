@@ -545,9 +545,15 @@ async def _render_order_history(
     page: int = 0,
 ) -> None:
     """Fetch and render paginated order history for a user."""
-    orders = await get_user_orders(user_id, limit=50)
-
-    if not orders:
+    
+    # 1. Get total orders dynamically from the user's profile
+    user_data = await get_user(user_id)
+    if not user_data:
+        return
+        
+    total = user_data.get("total_orders", 0)
+    
+    if total == 0:
         text = (
             "━━━━━━━━━━━━━━━━━━━━━━━\n"
             "📦 <b>ORDER HISTORY</b>\n"
@@ -563,10 +569,11 @@ async def _render_order_history(
             await message.answer(text, reply_markup=kb)
         return
 
-    total = len(orders)
     total_pages = max(1, (total + _HISTORY_PAGE_SIZE - 1) // _HISTORY_PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
-    page_orders = orders[page * _HISTORY_PAGE_SIZE : (page + 1) * _HISTORY_PAGE_SIZE]
+    
+    # 2. Fetch ONLY the specific page from the database (Server-side pagination)
+    page_orders = await get_user_orders(user_id, limit=_HISTORY_PAGE_SIZE, page=page)
 
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━━",
@@ -596,6 +603,7 @@ async def _render_order_history(
 
     lines.append("\n━━━━━━━━━━━━━━━━━━━━━━━")
     text = "\n".join(lines)
+    
     kb = order_history_keyboard(
         has_prev=(page > 0),
         has_next=(page < total_pages - 1),
