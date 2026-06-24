@@ -1,0 +1,12 @@
+name = "instavault-leaderboard-worker"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+[triggers]
+crons = ["*/10 * * * *"] # Runs every 10 minutes
+
+# Variables you need to set via Cloudflare Dashboard or wrangler secret put:
+# FIRESTORE_PROJECT_ID
+# FIRESTORE_API_KEY
+# UPSTASH_REDIS_REST_URL
+# UPSTASH_REDIS_REST_TOKEN
