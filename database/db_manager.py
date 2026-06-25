@@ -29,8 +29,10 @@ from google.cloud.firestore import Increment, async_transactional, Query
 from google.cloud.firestore_v1 import AsyncDocumentReference
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+import json
 import config
 from database.firebase_init import get_db
+from database.redis_manager import get_redis
 from utils.helpers import generate_referral_code, generate_vault_id, get_ist_now
 
 # ---------------------------------------------------------------------------
@@ -439,22 +441,55 @@ async def reward_referrer(referrer_id: int | str) -> None:
 # ===========================================================================
 
 async def get_leaderboard(limit: int = 10) -> list[dict[str, Any]]:
-    """Return the top ``limit`` users ordered by ``spark_balance`` descending.
-
-    Relies on an auto-created single-field index on ``spark_balance``.
+    """Return the top ``limit`` users ordered by ``lifetime_sparks`` descending.
+    Uses Redis as the primary data source with Cache-Aside fallback to Firestore.
     """
-    db = get_db()
-    query = (
-        db.collection(USERS_COL)
-        .order_by("spark_balance", direction="DESCENDING")
-        .limit(limit)
-    )
-    results: list[dict[str, Any]] = []
-    async for doc in query.stream():
-        data = doc.to_dict()
-        data["_uid"] = doc.id
-        results.append(data)
-    return results
+    cache_key = "leaderboard:lifetime"
+    redis = None
+    
+    # 1. Try fetching from Redis first
+    try:
+        redis = get_redis()
+        cached_data = await redis.get(cache_key)
+        if cached_data:
+            if isinstance(cached_data, bytes):
+                cached_data = cached_data.decode("utf-8")
+            return json.loads(cached_data)[:limit]
+    except Exception as e:
+        logger.warning("Leaderboard cache miss/error, falling back to Firestore: %s", e)
+
+    # 2. Fallback to Firestore if Cache Miss
+    try:
+        db = get_db()
+        query = (
+            db.collection(USERS_COL)
+            .order_by("lifetime_sparks", direction="DESCENDING")
+            .limit(limit)
+        )
+        
+        results: list[dict[str, Any]] = []
+        async for doc in query.stream():
+            data = doc.to_dict() or {}
+            # PRO-TIP: Maintain strict schema consistency with the Cloudflare Worker
+            # to avoid large payload writes and ensure uniform UI rendering.
+            results.append({
+                "_uid": doc.id,
+                "first_name": data.get("first_name", "Anonymous"),
+                "lifetime_sparks": int(data.get("lifetime_sparks", 0))
+            })
+            
+        # 3. Update Redis cache so subsequent hits are fast
+        if redis is not None and results:
+            try:
+                await redis.setex(cache_key, 900, json.dumps(results))
+            except Exception as e:
+                logger.error("Failed to update leaderboard cache: %s", e)
+                
+        return results
+
+    except Exception as e:
+        logger.error("Firestore leaderboard fallback failed: %s", e)
+        return []  # Graceful degradation (shows empty leaderboard instead of crashing bot)
 
 
 # ===========================================================================

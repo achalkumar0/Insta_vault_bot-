@@ -479,7 +479,7 @@ async def cb_nav_leaderboard(query: CallbackQuery) -> None:
 
     lines: list[str] = [
         "━━━━━━━━━━━━━━━━━━━━━━━",
-        "🏆 <b>INSTAVAULT LEADERBOARD</b>",
+        "🏆 <b>LIFETIME LEADERBOARD</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━",
         "",
     ]
@@ -488,7 +488,7 @@ async def cb_nav_leaderboard(query: CallbackQuery) -> None:
         medal  = _RANK_MEDALS.get(i, f"{i}.")
         raw_name = user.get("first_name") or "Anonymous"
         name   = html.escape(raw_name)
-        sparks = int(user.get("spark_balance", 0))
+        sparks = int(user.get("lifetime_sparks", 0))
         lines.append(f"{medal} {name} — <b>{sparks:,} ⚡</b>")
 
     lines += ["", "━━━━━━━━━━━━━━━━━━━━━━━"]
