@@ -43,8 +43,11 @@ from database.db_manager import (
     log_transaction,
     update_user,
     open_mystery_box_transactional,
+    buy_streak_shield_transactional,
     CooldownActiveError,
     InsufficientSparksError,
+    MaxShieldsReachedError,
+    UserNotFoundError,
 )
 from keyboards.inline import (
     back_to_dashboard_keyboard,
@@ -396,53 +399,37 @@ _BOX_TIERS = [
 
 @router.callback_query(F.data == "action_mystery_box")
 async def cb_mystery_box(query: CallbackQuery) -> None:
-    """
-    Mystery Box handler.
-    query.answer() is called exactly once:
-      - With show_alert=True on cooldown hit or profile-not-found.
-      - With silent answer() on success (before editing the message).
-    """
     if query.message is None:
         await query.answer()
         return
 
+    # FIX: Answer immediately to prevent Telegram timeout during Firestore transaction
+    await query.answer("🎰 Opening Mystery Box...", show_alert=False)
+
     user_id = query.from_user.id
-    user_data = await get_user(user_id)
-    if not user_data:
-        await query.answer("⚠️ Profile not found. Please use /start.", show_alert=True)
-        return
-
-    # ── Cooldown check — one box per calendar day (IST) ──────────────────
-    today_str = get_ist_now().strftime("%Y-%m-%d")
-    last_box_date = user_data.get("last_mystery_box_date")
-
-    if last_box_date == today_str:
-        await query.answer(
-            "😅 Aaj ka box khul chuka hai! Kal wapas aana. 🌙",
-            show_alert=True,
-        )
-        return
-
-    # ── Weighted prize draw ───────────────────────────────────────────────
+    
+    # ── Weighted prize draw ──
     mins    = [t[0] for t in _BOX_TIERS]
     maxs    = [t[1] for t in _BOX_TIERS]
     weights = [t[2] for t in _BOX_TIERS]
-
     chosen_idx = random.choices(range(len(_BOX_TIERS)), weights=weights, k=1)[0]
     won_sparks = random.randint(mins[chosen_idx], maxs[chosen_idx])
 
-    # ── Atomic DB writes ──────────────────────────────────────────────────
+    # ── Atomic DB writes ──
+    # FIX: We rely completely on the transaction to prevent race conditions and double reads
     try:
         await open_mystery_box_transactional(user_id, cost_sparks=100, won_sparks=won_sparks)
+    except UserNotFoundError:
+        await query.message.edit_text("⚠️ Profile not found. Please use /start.")
+        return
     except CooldownActiveError:
-        await query.answer("😅 Aaj ka box khul chuka hai! Kal wapas aana. 🌙", show_alert=True)
+        await query.message.edit_text("😅 Aaj ka box khul chuka hai! Kal wapas aana. 🌙", reply_markup=back_to_dashboard_keyboard())
         return
     except InsufficientSparksError:
-        await query.answer("⚠️ Mystery Box kholne ke liye 100 Sparks chahiye!", show_alert=True)
+        await query.message.edit_text("⚠️ Mystery Box kholne ke liye 100 Sparks chahiye!", reply_markup=back_to_dashboard_keyboard())
         return
 
-    # ── Answer once, then edit message ───────────────────────────────────
-    await query.answer()
+    # ── Edit message on success ──
     text = (
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
         "🎁 <b>Box Khul Gaya!</b>\n\n"
@@ -452,6 +439,39 @@ async def cb_mystery_box(query: CallbackQuery) -> None:
         "━━━━━━━━━━━━━━━━━━━━━━━"
     )
     await query.message.edit_text(text, reply_markup=mystery_box_result_keyboard())
+
+@router.callback_query(F.data == "action_buy_shield")
+async def cb_buy_shield(query: CallbackQuery) -> None:
+    if query.message is None:
+        await query.answer()
+        return
+
+    # PREVENT TIMEOUT
+    await query.answer("🛡️ Purchasing Streak Shield...", show_alert=False)
+    user_id = query.from_user.id
+
+    try:
+        await buy_streak_shield_transactional(user_id, cost_sparks=200)
+    except UserNotFoundError:
+        await query.message.edit_text("⚠️ Profile not found. Please use /start.")
+        return
+    except MaxShieldsReachedError:
+        await query.message.edit_text("🛡️ Tumhare paas already 3 shields hain! Aur nahi kharid sakte.", reply_markup=back_to_dashboard_keyboard())
+        return
+    except InsufficientSparksError:
+        await query.message.edit_text("⚠️ Shield kharidne ke liye 200 Sparks chahiye!", reply_markup=back_to_dashboard_keyboard())
+        return
+
+    await query.message.edit_text(
+        "🛡️ <b>Shield Purchased!</b>\n\n"
+        "Tumhari streak ab kal bach jayegi agar login miss hua toh.\n"
+        "Keep the streak going! 🔥",
+        reply_markup=back_to_dashboard_keyboard()
+    )
+
+@router.callback_query(F.data == "action_shields_full")
+async def cb_shields_full(query: CallbackQuery) -> None:
+    await query.answer("🛡️ Tumhare paas pehle se hi maximum 3 shields hain!", show_alert=True)
 
 
 # ===========================================================================
@@ -646,7 +666,6 @@ _COMING_SOON = {
     "faq",
     "mission_start",
     "mystery_box_open",
-    "jackpot_tickets",
     "notif_settings",
     "tx_history",
 }

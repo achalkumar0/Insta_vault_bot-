@@ -189,7 +189,6 @@ def _build_default_user_data(
 
         # Gamification
         "power_score": 0,
-        "jackpot_tickets": 0,
 
         # Preferences
         "notif_preference": "all",
@@ -704,7 +703,7 @@ async def open_mystery_box_transactional(
     @async_transactional
     async def _run_in_tx(tx) -> tuple[int, int]:
         user_ref = db.collection(USERS_COL).document(str(user_id))
-        user_snap = await tx.get(user_ref)
+        user_snap = await user_ref.get(transaction=tx)
 
         if not user_snap.exists:
             raise UserNotFoundError(f"User {user_id} not found in database.")
@@ -790,7 +789,7 @@ async def buy_streak_shield_transactional(
     @async_transactional
     async def _run_in_tx(tx) -> tuple[int, int]:
         user_ref = db.collection(USERS_COL).document(str(user_id))
-        user_snap = await tx.get(user_ref)
+        user_snap = await user_ref.get(transaction=tx)
 
         if not user_snap.exists:
             raise UserNotFoundError(f"User {user_id} not found in database.")
