@@ -219,7 +219,7 @@ def order_keyboard_empty() -> InlineKeyboardMarkup:
     )
 
 
-def rewards_keyboard(shields: int = 0) -> InlineKeyboardMarkup:
+def rewards_keyboard() -> InlineKeyboardMarkup:
     """Rewards center."""
     buttons = [
         [
@@ -230,28 +230,12 @@ def rewards_keyboard(shields: int = 0) -> InlineKeyboardMarkup:
         ]
     ]
 
-    if shields < 3:
-        buttons.append([
-            InlineKeyboardButton(
-                text="🛡️ Buy Streak Shield (200 Sparks)",
-                callback_data="action_buy_shield",
-            )
-        ])
-    else:
-        buttons.append([
-            InlineKeyboardButton(
-                text="🛡️ Streak Shields Full (Max 3)",
-                callback_data="action_shields_full",
-            )
-        ])
-
     buttons.append([
         InlineKeyboardButton(
             text="🏠 Back to Dashboard",
             callback_data="go_dashboard",
         )
     ])
-
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

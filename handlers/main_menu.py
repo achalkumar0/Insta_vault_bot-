@@ -43,10 +43,8 @@ from database.db_manager import (
     log_transaction,
     update_user,
     open_mystery_box_transactional,
-    buy_streak_shield_transactional,
     CooldownActiveError,
     InsufficientSparksError,
-    MaxShieldsReachedError,
     UserNotFoundError,
 )
 from keyboards.inline import (
@@ -291,23 +289,20 @@ async def _render_rewards_screen(
 ) -> None:
     user_data = await get_user(user_id)
     streak = user_data.get("streak_days", 0) if user_data else 0
-    shields = user_data.get("streak_shields", 0) if user_data else 0
 
     text = (
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
         "🎁 <b>REWARDS CENTER</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🔥 <b>Current Streak:</b> {streak} Days\n"
-        f"🛡️ <b>Streak Shields:</b> {shields} / 3\n\n"
+        f"🔥 <b>Current Streak:</b> {streak} Days\n\n"
         "🎰 <b>Mystery Box:</b> Open for 100 Sparks to win up to 2,000 Sparks!\n"
-        "🛡️ <b>Streak Shield:</b> Buy for 200 Sparks to protect your streak from resetting if you miss a day!\n"
         "━━━━━━━━━━━━━━━━━━━━━━━"
     )
 
     if edit:
-        await message.edit_text(text, reply_markup=rewards_keyboard(shields=shields))
+        await message.edit_text(text, reply_markup=rewards_keyboard())
     else:
-        await message.answer(text, reply_markup=rewards_keyboard(shields=shields))
+        await message.answer(text, reply_markup=rewards_keyboard())
 
 
 # ===========================================================================
@@ -440,38 +435,7 @@ async def cb_mystery_box(query: CallbackQuery) -> None:
     )
     await query.message.edit_text(text, reply_markup=mystery_box_result_keyboard())
 
-@router.callback_query(F.data == "action_buy_shield")
-async def cb_buy_shield(query: CallbackQuery) -> None:
-    if query.message is None:
-        await query.answer()
-        return
 
-    # PREVENT TIMEOUT
-    await query.answer("🛡️ Purchasing Streak Shield...", show_alert=False)
-    user_id = query.from_user.id
-
-    try:
-        await buy_streak_shield_transactional(user_id, cost_sparks=200)
-    except UserNotFoundError:
-        await query.message.edit_text("⚠️ Profile not found. Please use /start.")
-        return
-    except MaxShieldsReachedError:
-        await query.message.edit_text("🛡️ Tumhare paas already 3 shields hain! Aur nahi kharid sakte.", reply_markup=back_to_dashboard_keyboard())
-        return
-    except InsufficientSparksError:
-        await query.message.edit_text("⚠️ Shield kharidne ke liye 200 Sparks chahiye!", reply_markup=back_to_dashboard_keyboard())
-        return
-
-    await query.message.edit_text(
-        "🛡️ <b>Shield Purchased!</b>\n\n"
-        "Tumhari streak ab kal bach jayegi agar login miss hua toh.\n"
-        "Keep the streak going! 🔥",
-        reply_markup=back_to_dashboard_keyboard()
-    )
-
-@router.callback_query(F.data == "action_shields_full")
-async def cb_shields_full(query: CallbackQuery) -> None:
-    await query.answer("🛡️ Tumhare paas pehle se hi maximum 3 shields hain!", show_alert=True)
 
 
 # ===========================================================================

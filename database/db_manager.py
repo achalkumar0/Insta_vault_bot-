@@ -69,8 +69,6 @@ class CooldownActiveError(Exception):
     """Raised when a user attempts to open a mystery box during cooldown."""
 
 
-class MaxShieldsReachedError(Exception):
-    """Raised when a user already has the maximum number of streak shields."""
 
 
 # ===========================================================================
@@ -165,7 +163,6 @@ def _build_default_user_data(
         # Streak — Day 1 on account creation
         "streak_days": 1,
         "last_login": now,
-        "streak_shields": 0,
         "last_daily_reset": now,
 
         # Missions
@@ -334,8 +331,6 @@ async def _process_streak_milestone_txn(
     new_streak: int,
     milestone_bonus: int,
     now_ist: str,
-    shield_used: bool,
-    shields: int,
     user_id: int | str,
 ) -> None:
     """Inner transactional function for atomic streak + milestone processing."""
@@ -343,9 +338,6 @@ async def _process_streak_milestone_txn(
         "streak_days": new_streak,
         "last_login": now_ist,
     }
-
-    if shield_used:
-        update_fields["streak_shields"] = shields - 1
 
     if milestone_bonus > 0:
         update_fields["spark_balance"] = Increment(milestone_bonus)
@@ -368,10 +360,8 @@ async def process_streak_milestone_transactional(
     new_streak: int,
     milestone_bonus: int,
     now_ist: str,
-    shield_used: bool,
-    shields: int,
 ) -> None:
-    """Atomically update streak details, consume a shield (if used),
+    """Atomically update streak details,
     increment Spark balance for milestone bonus, and log the transaction.
 
     All writes happen in a single Firestore transaction.
@@ -388,8 +378,6 @@ async def process_streak_milestone_transactional(
         new_streak,
         milestone_bonus,
         now_ist,
-        shield_used,
-        shields,
         user_id,
     )
 
@@ -758,81 +746,6 @@ async def open_mystery_box_transactional(
             user_id, cost_sparks, won_sparks,
         )
         return cost_sparks, won_sparks
-
-    return await _run_in_tx(transaction)
-
-
-# ===========================================================================
-# STREAK SHIELD — Transactional Purchase
-# ===========================================================================
-
-async def buy_streak_shield_transactional(
-    user_id: int | str,
-    cost_sparks: int = 200,
-    max_shields: int = 3,
-) -> tuple[int, int]:
-    """Atomically purchase a streak shield: verify balance, verify shield
-    count is below max, deduct cost, increment shields, and log the
-    transaction.
-
-    Returns:
-        ``(new_shields, new_balance)`` tuple.
-
-    Raises:
-        UserNotFoundError: User document does not exist.
-        MaxShieldsReachedError: Already at maximum shield count.
-        InsufficientSparksError: Balance is too low.
-    """
-    db = get_db()
-    transaction = db.transaction()
-
-    @async_transactional
-    async def _run_in_tx(tx) -> tuple[int, int]:
-        user_ref = db.collection(USERS_COL).document(str(user_id))
-        user_snap = await user_ref.get(transaction=tx)
-
-        if not user_snap.exists:
-            raise UserNotFoundError(f"User {user_id} not found in database.")
-
-        user_data = user_snap.to_dict() or {}
-
-        # 1. Shield limit check
-        current_shields = int(user_data.get("streak_shields", 0))
-        if current_shields >= max_shields:
-            raise MaxShieldsReachedError(f"Already have max shields ({max_shields}).")
-
-        # 2. Balance check
-        current_balance = int(user_data.get("spark_balance", 0))
-        if current_balance < cost_sparks:
-            raise InsufficientSparksError(
-                f"Insufficient Sparks: user has {current_balance}, need {cost_sparks} to buy shield."
-            )
-
-        # 3. Compute new values
-        new_shields = current_shields + 1
-        new_balance = current_balance - cost_sparks
-
-        # 4. Update user document
-        tx.update(user_ref, {
-            "streak_shields": new_shields,
-            "spark_balance": new_balance,
-        })
-
-        # 5. Log transaction
-        tx_ref = db.collection(TRANSACTIONS_COL).document()
-        tx.set(tx_ref, {
-            "user_id": str(user_id),
-            "type": "spend",
-            "amount": cost_sparks,
-            "source": "buy_streak_shield",
-            "created_at": get_ist_now(),
-        })
-
-        logger.info(
-            "Streak shield bought for user %s: -%s Sparks, shields: %s.",
-            user_id, cost_sparks, new_shields,
-        )
-        return new_shields, new_balance
 
     return await _run_in_tx(transaction)
 
