@@ -718,7 +718,7 @@ async def open_mystery_box_transactional(
             "type": "daily_free_bonus",
             "source": "mystery_box",
             "amount": won_sparks,
-            "created_at": get_ist_now().strftime("%Y-%m-%d %H:%M:%S"),
+            "created_at": get_ist_now(),
         })
 
         logger.info(

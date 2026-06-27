@@ -393,6 +393,10 @@ _BOX_TIERS = [
     (1000, 2000,  5),   #  5% — Legendary
 ]
 
+_BOX_MINS = [t[0] for t in _BOX_TIERS]
+_BOX_MAXS = [t[1] for t in _BOX_TIERS]
+_BOX_WEIGHTS = [t[2] for t in _BOX_TIERS]
+
 
 @router.callback_query(F.data == "action_mystery_box")
 async def cb_mystery_box(query: CallbackQuery) -> None:
@@ -406,11 +410,8 @@ async def cb_mystery_box(query: CallbackQuery) -> None:
     user_id = query.from_user.id
     
     # ── Weighted prize draw ──
-    mins    = [t[0] for t in _BOX_TIERS]
-    maxs    = [t[1] for t in _BOX_TIERS]
-    weights = [t[2] for t in _BOX_TIERS]
-    chosen_idx = random.choices(range(len(_BOX_TIERS)), weights=weights, k=1)[0]
-    won_sparks = random.randint(mins[chosen_idx], maxs[chosen_idx])
+    chosen_idx = random.choices(range(len(_BOX_TIERS)), weights=_BOX_WEIGHTS, k=1)[0]
+    won_sparks = random.randint(_BOX_MINS[chosen_idx], _BOX_MAXS[chosen_idx])
 
     # ── Atomic DB writes ──
     # FIX: We rely completely on the transaction to prevent race conditions and double reads
