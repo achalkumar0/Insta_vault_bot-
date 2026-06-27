@@ -669,83 +669,63 @@ async def place_order_transactional(
 
 async def open_mystery_box_transactional(
     user_id: int | str,
-    cost_sparks: int,
     won_sparks: int,
-) -> tuple[int, int]:
-    """Atomically open a Mystery Box: verify cooldown, verify balance,
-    deduct cost, add winnings, update cooldown date, and log a double-ledger
-    (spend + win) for full auditability.
+) -> int:
+    """Atomically open a free daily mystery box: verify cooldown,
+    add winnings, and log the transaction.
 
     Returns:
-        ``(cost_sparks, won_sparks)`` tuple.
+        ``won_sparks`` (int).
 
     Raises:
         UserNotFoundError: User document does not exist.
-        CooldownActiveError: Box already opened today (IST calendar day).
-        InsufficientSparksError: Balance is too low to open.
+        CooldownActiveError: Box was already opened today.
     """
     db = get_db()
     transaction = db.transaction()
-    today_str = get_ist_now().strftime("%Y-%m-%d")
 
     @async_transactional
-    async def _run_in_tx(tx) -> tuple[int, int]:
+    async def _run_in_tx(tx) -> int:
         user_ref = db.collection(USERS_COL).document(str(user_id))
         user_snap = await user_ref.get(transaction=tx)
 
         if not user_snap.exists:
-            raise UserNotFoundError(f"User {user_id} not found in database.")
+            raise UserNotFoundError(f"User {user_id} not found.")
 
         user_data = user_snap.to_dict() or {}
+        today_str = get_ist_now().strftime("%Y-%m-%d")
 
-        # 1. Cooldown check (IST calendar day)
+        # 1. Cooldown check
         if user_data.get("last_mystery_box_date") == today_str:
-            raise CooldownActiveError("Mystery Box already opened today.")
+            raise CooldownActiveError("Mystery box already opened today.")
 
-        # 2. Balance check
-        current_balance = user_data.get("spark_balance", 0)
-        if current_balance < cost_sparks:
-            raise InsufficientSparksError(
-                f"Insufficient Sparks: user has {current_balance}, need {cost_sparks} to open."
-            )
+        # 2. Compute new balances
+        current_balance = int(user_data.get("spark_balance", 0))
+        new_balance = current_balance + won_sparks
+        new_lifetime = int(user_data.get("lifetime_sparks", 0)) + won_sparks
 
-        # 3. Compute new balances
-        new_balance = current_balance - cost_sparks + won_sparks
-        new_lifetime = user_data.get("lifetime_sparks", 0) + won_sparks
-
-        # 4. Update user document
+        # 3. Update user
         tx.update(user_ref, {
             "spark_balance": new_balance,
             "lifetime_sparks": new_lifetime,
             "last_mystery_box_date": today_str,
         })
 
-        # 5. Double-ledger entries for auditability
-        now = get_ist_now()
-
-        tx_spend_ref = db.collection(TRANSACTIONS_COL).document()
-        tx.set(tx_spend_ref, {
+        # 4. Log transaction (Free Bonus)
+        tx_reward_ref = db.collection(TRANSACTIONS_COL).document()
+        tx.set(tx_reward_ref, {
             "user_id": str(user_id),
-            "type": "spend",
-            "amount": cost_sparks,
-            "source": "mystery_box_open",
-            "created_at": now,
-        })
-
-        tx_win_ref = db.collection(TRANSACTIONS_COL).document()
-        tx.set(tx_win_ref, {
-            "user_id": str(user_id),
-            "type": "bonus",
+            "type": "daily_free_bonus",
+            "source": "mystery_box",
             "amount": won_sparks,
-            "source": "mystery_box_reward",
-            "created_at": now,
+            "created_at": get_ist_now().strftime("%Y-%m-%d %H:%M:%S"),
         })
 
         logger.info(
-            "Mystery box opened for user %s: spent %s, won %s.",
-            user_id, cost_sparks, won_sparks,
+            "Mystery box for user %s: +%s Sparks (Free Daily Bonus).",
+            user_id, won_sparks,
         )
-        return cost_sparks, won_sparks
+        return won_sparks
 
     return await _run_in_tx(transaction)
 

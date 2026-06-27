@@ -224,7 +224,7 @@ def rewards_keyboard() -> InlineKeyboardMarkup:
     buttons = [
         [
             InlineKeyboardButton(
-                text="🎰 Mystery Box (100 Sparks)",
+                text="🎁 Daily Reward Box",
                 callback_data="action_mystery_box",
             )
         ]

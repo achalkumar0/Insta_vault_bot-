@@ -44,7 +44,6 @@ from database.db_manager import (
     update_user,
     open_mystery_box_transactional,
     CooldownActiveError,
-    InsufficientSparksError,
     UserNotFoundError,
 )
 from keyboards.inline import (
@@ -295,7 +294,10 @@ async def _render_rewards_screen(
         "🎁 <b>REWARDS CENTER</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"🔥 <b>Current Streak:</b> {streak} Days\n\n"
-        "🎰 <b>Mystery Box:</b> Open for 100 Sparks to win up to 2,000 Sparks!\n"
+        "🎁 <b>Daily Reward Box:</b>\n"
+        "• Completely free, no Sparks required\n"
+        "• Resets every day at midnight IST\n"
+        "• Get a random reward every day!\n"
         "━━━━━━━━━━━━━━━━━━━━━━━"
     )
 
@@ -413,24 +415,20 @@ async def cb_mystery_box(query: CallbackQuery) -> None:
     # ── Atomic DB writes ──
     # FIX: We rely completely on the transaction to prevent race conditions and double reads
     try:
-        await open_mystery_box_transactional(user_id, cost_sparks=100, won_sparks=won_sparks)
+        await open_mystery_box_transactional(user_id, won_sparks=won_sparks)
     except UserNotFoundError:
         await query.message.edit_text("⚠️ Profile not found. Please use /start.")
         return
     except CooldownActiveError:
-        await query.message.edit_text("😅 Aaj ka box khul chuka hai! Kal wapas aana. 🌙", reply_markup=back_to_dashboard_keyboard())
-        return
-    except InsufficientSparksError:
-        await query.message.edit_text("⚠️ Mystery Box kholne ke liye 100 Sparks chahiye!", reply_markup=back_to_dashboard_keyboard())
+        await query.message.edit_text("😅 Aaj ka Daily Reward tum le chuke ho! Kal wapas aana. 🌙", reply_markup=back_to_dashboard_keyboard())
         return
 
     # ── Edit message on success ──
     text = (
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🎁 <b>Box Khul Gaya!</b>\n\n"
-        "⚡ <b>100 Sparks spent!</b>\n"
+        "🎁 <b>DAILY REWARD UNLOCKED!</b>\n\n"
         f"🎉 Tujhe mila: <b>{won_sparks} Sparks!</b> ⚡\n\n"
-        "Kal bhi try karna — kal ka box aaj se bada ho sakta hai! 😄\n"
+        "Kal wapas aana naye reward ke liye! 😄\n"
         "━━━━━━━━━━━━━━━━━━━━━━━"
     )
     await query.message.edit_text(text, reply_markup=mystery_box_result_keyboard())
