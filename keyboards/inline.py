@@ -253,8 +253,18 @@ def profile_keyboard(ig_linked: bool = False) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="📋 View Order History",
+                    text="📦 My Orders",
                     callback_data="nav_order_history",
+                ),
+                InlineKeyboardButton(
+                    text="🤝 Invite Friends",
+                    callback_data="nav_refer",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎁 Daily Reward",
+                    callback_data="action_mystery_box",
                 )
             ],
             [

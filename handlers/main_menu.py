@@ -355,24 +355,25 @@ async def _render_profile_screen(
     ig_handle    = user_data.get("instagram_handle")
     join_fmt     = format_timestamp(join_date, fmt="%d %b %Y")
 
-    ig_line = f"📸 <b>Instagram:</b>      @{ig_handle}" if ig_handle else "📸 <b>Instagram:</b>      ❌ Not Linked"
+    if ig_handle:
+        ig_line = f"📸 <b>Instagram:</b> @{ig_handle}"
+    else:
+        ig_line = "📸 <b>Instagram:</b> ❌ Not Linked\n\n<i>(💡 Tip: Link it below to start ordering!)</i>"
 
     text = (
-        "━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "📊 <b>TERA VAULT PROFILE</b>\n"
+        "🏛️ <b>VAULT PROFILE</b>\n\n"
+        "<blockquote>"
+        f"👤 <b>{first_name}</b>\n"
+        f"🆔 <code>{vault_id}</code> | 📅 {join_fmt}"
+        "</blockquote>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"👤 <b>Name:</b>         {first_name}\n"
-        f"🆔 <b>Vault ID:</b>     <code>{vault_id}</code>\n"
-        f"📅 <b>Member Since:</b> {join_fmt}\n"
-        f"{ig_line}\n"
+        f"{ig_line}\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🪙 <b>Sparks Balance:</b>   {sparks:,}\n"
-        f"👑 <b>Current Rank:</b>     {rank}\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"📦 <b>Total Orders:</b>     {total_orders}\n"
-        f"🤝 <b>Total Referrals:</b>  {ref_count}\n"
-        f"🔥 <b>Best Streak:</b>      {streak}\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━"
+        f"🪙 <b>{sparks:,} Sparks</b>   •   👑 <b>{rank}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📦 <b>Orders:</b> {total_orders}\n"
+        f"🤝 <b>Referrals:</b> {ref_count}\n"
+        f"🔥 <b>Current Streak:</b> {streak} Days"
     )
 
     if edit:
