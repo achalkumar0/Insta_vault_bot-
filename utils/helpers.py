@@ -27,10 +27,18 @@ def get_ist_now() -> datetime:
     return datetime.now(tz)
 
 
-def format_timestamp(dt: datetime | None, fmt: str = "%d %b %Y, %I:%M %p") -> str:
-    """Format a datetime object as a human-readable IST string."""
+def format_timestamp(dt: datetime | str | None, fmt: str = "%d %b %Y, %I:%M %p") -> str:
+    """Format a datetime object as a human-readable IST string. Supports ISO strings."""
     if dt is None:
         return "N/A"
+    
+    if isinstance(dt, str):
+        try:
+            # Handle ISO strings (e.g. from JSON/Redis cache)
+            dt = datetime.fromisoformat(dt)
+        except ValueError:
+            return dt
+
     tz = pytz.timezone(TIMEZONE)
     if dt.tzinfo is None:
         dt = pytz.utc.localize(dt)

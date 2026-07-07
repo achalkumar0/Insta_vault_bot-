@@ -26,7 +26,7 @@ from aiogram import F, Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
+from aiogram.types import CallbackQuery, Message
 
 
 import config
@@ -78,15 +78,9 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     user_id = user.id
     first_name = user.first_name or "Vault Member"
 
-    # ── Returning user: clear any stale reply keyboard + go straight to dashboard
+    # ── Returning user: clear any stale FSM state + go straight to dashboard
     if await user_exists(user_id):
         await state.clear()
-
-        # Remove any leftover reply keyboard from old sessions
-        await message.answer(
-            f"👋 <b>Welcome back, {first_name}!</b> Tera Vault ready hai. 🔥",
-            reply_markup=ReplyKeyboardRemove(),
-        )
 
         # Lazy streak engine inside show_dashboard handles last_login stamp
         from handlers.main_menu import show_dashboard

@@ -106,6 +106,18 @@ def _build_bot_and_dispatcher():
     dp.message.outer_middleware(throttle)
     dp.callback_query.outer_middleware(throttle)
 
+    # Logging middleware to track incoming updates
+    from aiogram import BaseMiddleware
+    class UpdateLoggerMiddleware(BaseMiddleware):
+        async def __call__(self, handler, event, data):
+            if hasattr(event, "message") and event.message and event.message.text:
+                logger.info(f"Incoming Command/Text: {event.message.text}")
+            elif hasattr(event, "callback_query") and event.callback_query and event.callback_query.data:
+                logger.info(f"Incoming Callback: {event.callback_query.data}")
+            return await handler(event, data)
+
+    dp.update.outer_middleware(UpdateLoggerMiddleware())
+
     return bot, dp
 
 

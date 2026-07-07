@@ -32,7 +32,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 import json
 import config
 from database.firebase_init import get_db
-from database.redis_manager import get_redis
+from database.redis_manager import get_redis, cache_user_data, get_cached_user_data, invalidate_user_cache
 from utils.helpers import generate_referral_code, generate_vault_id, get_ist_now
 
 # ---------------------------------------------------------------------------
@@ -83,16 +83,33 @@ async def user_exists(user_id: int | str) -> bool:
 
 
 async def get_user(user_id: int | str) -> dict[str, Any] | None:
-    """Fetch a user document as a dict.  Returns ``None`` if not found."""
+    """Fetch a user document as a dict.  Returns ``None`` if not found.
+    Reads from Redis cache first; falls back to Firestore on miss.
+    """
+    # 1. Try Redis Cache (Fail-Safe Read-Through)
+    cached = await get_cached_user_data(user_id)
+    if cached is not None:
+        logger.info("Cache hit for user %s", user_id)
+        return cached
+
+    # 2. Cache Miss - Fetch from Firestore
+    logger.info("Cache miss for user %s. Fetching from Firestore.", user_id)
     db = get_db()
     doc = await db.collection(USERS_COL).document(str(user_id)).get()
-    return doc.to_dict() if doc.exists else None
+    
+    if doc.exists:
+        data = doc.to_dict()
+        # 3. Save back to Cache
+        await cache_user_data(user_id, data)
+        return data
+    return None
 
 
 async def update_user(user_id: int | str, fields: dict[str, Any]) -> None:
     """Partially update fields on an existing user document."""
     db = get_db()
     await db.collection(USERS_COL).document(str(user_id)).update(fields)
+    await invalidate_user_cache(user_id)
 
 
 async def update_last_login(user_id: int | str) -> None:
@@ -114,6 +131,7 @@ async def increment_spark_balance(user_id: int | str, amount: int) -> None:
         "spark_balance": Increment(amount),
         "lifetime_sparks": Increment(amount),
     })
+    await invalidate_user_cache(user_id)
 
 
 async def deduct_spark_balance(user_id: int | str, amount: int) -> None:
@@ -122,6 +140,7 @@ async def deduct_spark_balance(user_id: int | str, amount: int) -> None:
     await db.collection(USERS_COL).document(str(user_id)).update({
         "spark_balance": Increment(-amount),
     })
+    await invalidate_user_cache(user_id)
 
 
 # ===========================================================================
@@ -305,7 +324,7 @@ async def create_user_transactional(
     referral_code = generate_referral_code(vault_id)
     user_ref = db.collection(USERS_COL).document(str(user_id))
 
-    return await _create_user_tx(
+    result = await _create_user_tx(
         transaction,
         user_ref,
         user_id,
@@ -317,6 +336,11 @@ async def create_user_transactional(
         referrer_uid,
         source_tag,
     )
+    if result:
+        await cache_user_data(user_id, result)
+        if referrer_uid:
+            await invalidate_user_cache(referrer_uid)
+    return result
 
 
 # ===========================================================================
@@ -380,6 +404,7 @@ async def process_streak_milestone_transactional(
         now_ist,
         user_id,
     )
+    await invalidate_user_cache(user_id)
 
 
 # ===========================================================================
@@ -417,6 +442,7 @@ async def reward_referrer(referrer_id: int | str) -> None:
         "lifetime_sparks": Increment(config.REFERRAL_JOIN_BONUS),
         "referral_count": Increment(1),
     })
+    await invalidate_user_cache(referrer_id)
     logger.info(
         "Referrer %s rewarded: +%s Sparks, referral_count +1",
         referrer_id, config.REFERRAL_JOIN_BONUS,
@@ -660,7 +686,9 @@ async def place_order_transactional(
         )
         return order_ref.id
 
-    return await _run_in_tx(transaction)
+    order_id = await _run_in_tx(transaction)
+    await invalidate_user_cache(user_id)
+    return order_id
 
 
 # ===========================================================================
@@ -727,7 +755,9 @@ async def open_mystery_box_transactional(
         )
         return won_sparks
 
-    return await _run_in_tx(transaction)
+    won_sparks_amount = await _run_in_tx(transaction)
+    await invalidate_user_cache(user_id)
+    return won_sparks_amount
 
 
 # ===========================================================================

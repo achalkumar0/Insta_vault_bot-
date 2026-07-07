@@ -5,7 +5,10 @@ Handles Redis connection pooling, lifecycle, and acts as the singleton provider
 for the Redis instance used by the bot.
 """
 import logging
-from typing import Optional
+import json
+import asyncio
+from datetime import datetime
+from typing import Optional, Any
 
 from redis.asyncio import Redis
 
@@ -77,3 +80,58 @@ async def close_redis() -> None:
             logger.error("Error while closing Redis connection: %s", e)
         finally:
             _redis_client = None
+
+
+# ===========================================================================
+# CACHING LAYER (FAIL-SAFE)
+# ===========================================================================
+
+class _DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder to safely serialize datetime objects to ISO strings."""
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+
+async def cache_user_data(user_id: int | str, data: dict[str, Any], ttl_seconds: int = 604800) -> None:
+    """Safely cache user profile data. Defaults to 7 Days (604800s). Silently fails and invalidates on error."""
+    try:
+        client = get_redis()
+        json_data = json.dumps(data, cls=_DateTimeEncoder)
+        await client.setex(f"user:{user_id}", ttl_seconds, json_data)
+        logger.info("✅ Cached data for user %s", user_id)
+    except Exception as e:
+        logger.error("Failed to cache user data for %s: %s", user_id, e)
+        # Attempt fail-safe invalidation to prevent stale data
+        await invalidate_user_cache(user_id)
+
+
+async def get_cached_user_data(user_id: int | str) -> dict[str, Any] | None:
+    """Retrieve user data from cache. Returns None on miss or error."""
+    try:
+        client = get_redis()
+        json_data = await client.get(f"user:{user_id}")
+        if json_data:
+            return json.loads(json_data)
+        return None
+    except Exception as e:
+        logger.error("Failed to fetch cached user data for %s: %s", user_id, e)
+        return None
+
+
+async def invalidate_user_cache(user_id: int | str) -> None:
+    """Delete a user's cache key to force a fresh read from DB."""
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            client = get_redis()
+            await client.delete(f"user:{user_id}")
+            logger.info("🗑️ Invalidated cache for user %s", user_id)
+            return
+        except Exception as e:
+            if attempt < max_attempts:
+                logger.warning("Failed to invalidate cache for %s on attempt %d: %s. Retrying...", user_id, attempt, e)
+                await asyncio.sleep(0.15)
+            else:
+                logger.error("Failed to invalidate cache for %s after %d attempts: %s", user_id, max_attempts, e)
