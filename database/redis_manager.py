@@ -94,8 +94,8 @@ class _DateTimeEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-async def cache_user_data(user_id: int | str, data: dict[str, Any], ttl_seconds: int = 604800) -> None:
-    """Safely cache user profile data. Defaults to 7 Days (604800s). Silently fails and invalidates on error."""
+async def cache_user_data(user_id: int | str, data: dict[str, Any], ttl_seconds: int = 86400) -> None:
+    """Safely cache user profile data. Defaults to 24 hours (86400s). Silently fails and invalidates on error."""
     try:
         client = get_redis()
         json_data = json.dumps(data, cls=_DateTimeEncoder)

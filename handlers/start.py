@@ -142,7 +142,7 @@ async def cb_beat_2(query: CallbackQuery, state: FSMContext) -> None:
         "<i>(Bilkul Free. Koi catch nahi.)</i>\n\n"
         "Abhi tere account mein hain:\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "⚡ <b>Sparks Balance: 500 Sparks</b>\n"
+        f"⚡ <b>Sparks Balance: {config.WELCOME_BONUS} Sparks</b>\n"
         "<i>(Welcome Bonus — sirf tere liye!)</i>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━",
         reply_markup=onboarding_beat2_keyboard(ref_code),
@@ -248,7 +248,7 @@ async def cb_beat_3(query: CallbackQuery, state: FSMContext) -> None:
     await query.message.edit_text(
         f"🎉 <b>Welcome to InstaVault, {first_name}!</b>\n"
         "Tera account ban gaya hai. 🏦\n\n"
-        "⚡ <b>Opening Balance:</b> 500 Sparks\n"
+        f"⚡ <b>Opening Balance:</b> {config.WELCOME_BONUS} Sparks\n"
         "📊 <b>Member Rank:</b> Rookie Vaulter\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
         "⚡ <b>DAILY MISSION aaj available hai:</b>\n"
