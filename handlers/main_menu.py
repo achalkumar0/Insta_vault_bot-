@@ -2,7 +2,7 @@
 handlers/main_menu.py
 ~~~~~~~~~~~~~~~~~~~~~
 Phase 3 — Five Core Screens & Navigation
-Phase 4 — Engagement Engine: Lazy Streak, Mystery Box, Leaderboard
+Phase 4 — Engagement Engine: Mystery Box, Leaderboard
 
 Screens:
   1. 🏠  Dashboard    (show_dashboard / go_dashboard / /dashboard)
@@ -15,8 +15,6 @@ Screens:
 
 Bug Fixes (P0/P1/P2):
   - P0: cb_mystery_box no longer double-answers the callback query.
-  - P1: _run_lazy_streak returns (user_data, popup_shown: bool) so the query
-        is answered exactly once per callback.
   - P1: cb_go_dashboard does NOT pre-answer; show_dashboard answers after
         rendering (so milestone popup can still show via query.answer()).
   - P1: Duplicate /order and F.text handlers removed — orders.py owns those.
@@ -116,7 +114,7 @@ def _clean_ig_handle(raw: str) -> str:
 
 
 # ===========================================================================
-# SCREEN 1 — 🏠 Dashboard  (with Lazy Streak)
+# SCREEN 1 — 🏠 Dashboard
 # ===========================================================================
 
 async def show_dashboard(
@@ -177,9 +175,7 @@ async def cmd_dashboard(message: Message) -> None:
 @router.callback_query(F.data == "go_dashboard")
 async def cb_go_dashboard(query: CallbackQuery) -> None:
     """
-    Back-to-dashboard from any sub-screen — edits in place.
-    Does NOT pre-answer the query; show_dashboard handles answering
-    so milestone streak popups can show correctly.
+    Back-to-dashboard from any sub-screen.
     """
     user = query.from_user
     if query.message and user:
@@ -287,13 +283,11 @@ async def _render_rewards_screen(
     user_id: int, message: Message, edit: bool
 ) -> None:
     user_data = await get_user(user_id)
-    streak = user_data.get("streak_days", 0) if user_data else 0
 
     text = (
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
         "🎁 <b>REWARDS CENTER</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🔥 <b>Current Streak:</b> {streak} Days\n\n"
         "🎁 <b>Daily Reward Box:</b>\n"
         "• Completely free, no Sparks required\n"
         "• Resets every day at midnight IST\n"
@@ -351,7 +345,6 @@ async def _render_profile_screen(
     ref_count    = user_data.get("referral_count", 0)
     sparks       = user_data.get("spark_balance", 0)
     rank         = user_data.get("rank_tier", "Rookie Vaulter")
-    streak       = user_data.get("streak_days", 0)
     ig_handle    = user_data.get("instagram_handle")
     join_fmt     = format_timestamp(join_date, fmt="%d %b %Y")
 
@@ -372,8 +365,7 @@ async def _render_profile_screen(
         f"🪙 <b>{sparks:,} Sparks</b>   •   👑 <b>{rank}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📦 <b>Orders:</b> {total_orders}\n"
-        f"🤝 <b>Referrals:</b> {ref_count}\n"
-        f"🔥 <b>Current Streak:</b> {streak} Days"
+        f"🤝 <b>Referrals:</b> {ref_count}"
     )
 
     if edit:
@@ -493,9 +485,8 @@ async def cmd_help(message: Message) -> None:
     await message.answer(
         "❓ <b>InstaVault Help Center</b>\n\n"
         "⚡ <b>Sparks</b> — Virtual currency. Earn by doing missions.\n"
-        "🎯 <b>Mission</b> — 1 daily mission (more with higher streaks).\n"
+        "🎯 <b>Mission</b> — 1 daily mission.\n"
         "📦 <b>Order</b> — Spend Sparks to get real Instagram views.\n"
-        "🔥 <b>Streak</b> — Log in daily to grow your streak & unlock rewards.\n"
         "👥 <b>Refer</b> — Share your link; earn Sparks for every friend.\n\n"
         "<i>Need more help? Tap the button below.</i>",
         reply_markup=help_keyboard(),

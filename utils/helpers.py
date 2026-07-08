@@ -7,15 +7,12 @@ Responsibilities:
   - Timezone-aware datetime helpers (IST by default)
   - Deterministic ID generators (Vault ID, referral codes)
   - Rank tier calculation from rank points
-  - Streak-based daily order limit lookup
 """
 
 from datetime import datetime
 
 import pytz
-
-from config import DAILY_LIMITS, TIMEZONE
-
+from config import TIMEZONE
 
 # ---------------------------------------------------------------------------
 # Timezone helpers
@@ -85,15 +82,3 @@ def get_rank_tier(rank_points: int) -> str:
         if rank_points >= threshold:
             tier = name
     return tier
-
-
-def get_daily_limit(streak_days: int) -> int:
-    """
-    Return the daily order limit based on streak days.
-    DAILY_LIMITS keys are minimum streak thresholds.
-    """
-    limit = 1
-    for min_streak, allowed in sorted(DAILY_LIMITS.items()):
-        if streak_days >= min_streak:
-            limit = allowed
-    return limit

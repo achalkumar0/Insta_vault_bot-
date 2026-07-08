@@ -179,14 +179,10 @@ def _build_default_user_data(
         "rank_points": 0,
         "rank_tier": "Rookie Vaulter",
 
-        # Streak — Day 1 on account creation
-        "streak_days": 1,
+        # Login
         "last_login": now,
         "last_daily_reset": now,
 
-        # Missions
-        "daily_level_count": 0,
-        "daily_limit": 1,
 
         # Mystery Box — None means never opened
         "last_mystery_box_date": None,
@@ -341,70 +337,6 @@ async def create_user_transactional(
         if referrer_uid:
             await invalidate_user_cache(referrer_uid)
     return result
-
-
-# ===========================================================================
-# USER OPERATIONS — Streak Milestones (Transactional)
-# ===========================================================================
-
-@async_transactional
-async def _process_streak_milestone_txn(
-    transaction,
-    user_ref: AsyncDocumentReference,
-    tx_ref: AsyncDocumentReference,
-    new_streak: int,
-    milestone_bonus: int,
-    now_ist: str,
-    user_id: int | str,
-) -> None:
-    """Inner transactional function for atomic streak + milestone processing."""
-    update_fields: dict[str, Any] = {
-        "streak_days": new_streak,
-        "last_login": now_ist,
-    }
-
-    if milestone_bonus > 0:
-        update_fields["spark_balance"] = Increment(milestone_bonus)
-        update_fields["lifetime_sparks"] = Increment(milestone_bonus)
-
-    transaction.update(user_ref, update_fields)
-
-    if milestone_bonus > 0:
-        transaction.set(tx_ref, {
-            "user_id": str(user_id),
-            "type": "bonus",
-            "amount": milestone_bonus,
-            "source": f"streak_milestone_day_{new_streak}",
-            "created_at": now_ist,
-        })
-
-
-async def process_streak_milestone_transactional(
-    user_id: int | str,
-    new_streak: int,
-    milestone_bonus: int,
-    now_ist: str,
-) -> None:
-    """Atomically update streak details,
-    increment Spark balance for milestone bonus, and log the transaction.
-
-    All writes happen in a single Firestore transaction.
-    """
-    db = get_db()
-    transaction = db.transaction()
-    user_ref = db.collection(USERS_COL).document(str(user_id))
-    tx_ref = db.collection(TRANSACTIONS_COL).document()
-
-    await _process_streak_milestone_txn(
-        transaction,
-        user_ref,
-        tx_ref,
-        new_streak,
-        milestone_bonus,
-        now_ist,
-        user_id,
-    )
-    await invalidate_user_cache(user_id)
 
 
 # ===========================================================================

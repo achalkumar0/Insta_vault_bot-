@@ -11,8 +11,7 @@ Trust:  ob_how_it_works → Safety explainer (can branch back to Beat 2)
 Returning users skip the flow entirely and land directly on the Dashboard.
 
 Bug Fixes (P1/P2):
-  - Returning user path no longer calls update_last_login; the lazy streak
-    engine in show_dashboard handles last_login stamping and streak logic.
+  - Returning user path skips onboarding and goes straight to dashboard.
   - ReplyKeyboardMarkup removed from every code path (ReplyKeyboardRemove
     used to clear any stale reply keyboard from older sessions).
   - nav_mission now edits in-place with Phase 3 content.
@@ -82,7 +81,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     if await user_exists(user_id):
         await state.clear()
 
-        # Lazy streak engine inside show_dashboard handles last_login stamp
+        # Route returning users straight to the dashboard
         from handlers.main_menu import show_dashboard
         await show_dashboard(user_id, first_name, message, edit=False)
         logger.info("Returning user login: %s", user_id)
@@ -250,8 +249,7 @@ async def cb_beat_3(query: CallbackQuery, state: FSMContext) -> None:
         f"🎉 <b>Welcome to InstaVault, {first_name}!</b>\n"
         "Tera account ban gaya hai. 🏦\n\n"
         "⚡ <b>Opening Balance:</b> 500 Sparks\n"
-        "📊 <b>Member Rank:</b> Rookie Vaulter\n"
-        "🔥 <b>Streak:</b> Day 1\n\n"
+        "📊 <b>Member Rank:</b> Rookie Vaulter\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
         "⚡ <b>DAILY MISSION aaj available hai:</b>\n"
         "<i>\"Earn more Sparks aur apna FIRST FREE 1,000 views order kar!\"</i>\n"

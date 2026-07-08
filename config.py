@@ -67,7 +67,6 @@ PACKAGES = {
 }
 
 # Limits & VIPs
-DAILY_LIMITS = {0: 1, 3: 2, 10: 3, 25: 4, 50: 999}
 VIP_SLOTS = 1000
 
 # Delivery & Compensation
