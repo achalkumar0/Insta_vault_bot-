@@ -414,6 +414,7 @@ async def cb_mystery_box(query: CallbackQuery) -> None:
         await query.message.edit_text("⚠️ Profile not found. Please use /start.")
         return
     except CooldownActiveError:
+        logger.warning("Spam/Duplicate blocked for user %s: Mystery Box already claimed today.", user_id)
         await query.message.edit_text("😅 Aaj ka Daily Reward tum le chuke ho! Kal wapas aana. 🌙", reply_markup=back_to_dashboard_keyboard())
         return
 

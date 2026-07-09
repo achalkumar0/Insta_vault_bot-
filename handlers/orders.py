@@ -220,6 +220,7 @@ async def cb_confirm_order(query: CallbackQuery, state: FSMContext) -> None:
         )
         return
     except DuplicateOrderError:
+        logger.warning("Spam/Duplicate blocked for user %s: Order nonce %s already processed.", user_id, nonce)
         await query.answer("⚠️ Order already processed!", show_alert=True)
         # Optionally, edit text to reflect it was already processed
         await query.message.edit_text("✅ This order has already been processed successfully.")
