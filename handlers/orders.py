@@ -21,13 +21,14 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
-from config import PACKAGES
+from config.packages import PACKAGES
 from database.db_manager import (
     get_user,
     place_order_transactional,
     InsufficientSparksError,
     UserNotFoundError,
     DuplicateOrderError,
+    DuplicateLinkError,
 )
 from keyboards.inline import (
     back_to_dashboard_keyboard,
@@ -44,22 +45,8 @@ class OrderState(StatesGroup):
 
 
 # ---------------------------------------------------------------------------
-# Callback → package_type mapping (underscore format, Phase 3 standard)
+# Dynamic package data is now driven by config/packages.py
 # ---------------------------------------------------------------------------
-_PKG_CALLBACK_MAP: dict[str, str] = {
-    "order_pkg_starter": "starter",
-    "order_pkg_growth":  "growth",
-    "order_pkg_pro":     "pro",
-}
-
-_PKG_DISPLAY: dict[str, str] = {
-    "starter": "🌱 Starter Boost",
-    "growth":  "🔥 Growth Pack",
-    "pro":     "💎 Pro Blast",
-    "mega":    "⚡ Mega",
-}
-
-
 # ---------------------------------------------------------------------------
 # /order  |  📦 Order Views
 # Exclusively handled here — main_menu.py owns only the nav_order callback.
@@ -79,10 +66,14 @@ async def cmd_order(message: Message) -> None:
         return
 
     sparks = user_data.get("spark_balance", 0)
-    if sparks < 500:
+    
+    # Dynamically calculate the minimum package cost
+    min_cost = min(pkg["cost"] for pkg in PACKAGES.values()) if PACKAGES else 500
+    
+    if sparks < min_cost:
         await message.answer(
             "😅 <b>Yaar, Sparks thode kam hain!</b>\n\n"
-            "Minimum needed: <b>500 Sparks</b>\n\n"
+            f"Minimum needed: <b>{min_cost:,} Sparks</b>\n\n"
             "Mission complete kar ya Mystery Box khol aur Sparks kamao!",
             reply_markup=order_keyboard_empty(),
         )
@@ -103,28 +94,30 @@ async def cmd_order(message: Message) -> None:
 # Package selection callback (underscore format)
 # ---------------------------------------------------------------------------
 
-@router.callback_query(F.data.in_(_PKG_CALLBACK_MAP))
+@router.callback_query(F.data.startswith("order_pkg_"))
 async def cb_select_package(query: CallbackQuery, state: FSMContext) -> None:
     """User tapped a package — ask for Instagram link."""
     await query.answer()
-    package_type = _PKG_CALLBACK_MAP[query.data]
-
-    pkg = PACKAGES.get(package_type)
-    if not pkg:
+    
+    # Extract package key (e.g. "starter", "growth")
+    package_type = query.data.replace("order_pkg_", "")
+    
+    pkg_data = PACKAGES.get(package_type)
+    if not pkg_data:
         await query.message.answer("⚠️ Unknown package. Please try again.")
         return
 
     user_data = await get_user(query.from_user.id)
     sparks = user_data.get("spark_balance", 0) if user_data else 0
-    affordable = sparks >= pkg["sparks"]
-    display_name = _PKG_DISPLAY.get(package_type, package_type.title())
+    affordable = sparks >= pkg_data["cost"]
+    display_name = pkg_data["ui_name"]
 
     if not affordable:
-        shortage = pkg["sparks"] - sparks
+        shortage = pkg_data["cost"] - sparks
         await query.message.edit_text(
             f"❌ <b>Insufficient Sparks</b>\n\n"
             f"Package: {display_name}\n"
-            f"Cost: <b>{pkg['sparks']:,} Sparks</b>\n"
+            f"Cost: <b>{pkg_data['cost']:,} Sparks</b>\n"
             f"Your Balance: <b>{sparks:,} Sparks</b>\n"
             f"Shortfall: <b>{shortage:,} Sparks</b>\n\n"
             f"Complete more missions to earn Sparks! 🎯",
@@ -132,7 +125,14 @@ async def cb_select_package(query: CallbackQuery, state: FSMContext) -> None:
         )
         return
 
-    await state.update_data(package_type=package_type)
+    # Phase 1 technical data mapping
+    await state.update_data(
+        package_type=package_type,
+        smm_service_id=pkg_data['smm_service_id'],
+        cost=pkg_data['cost'],
+        views=pkg_data['views']
+    )
+    
     await state.set_state(OrderState.waiting_for_link)
     await query.message.edit_text(
         f"🔗 <b>Link Daalo</b>\n\n"
@@ -149,8 +149,37 @@ async def handle_order_link(message: Message, state: FSMContext) -> None:
         await message.answer("❌ Order cancelled.")
         return
 
-    if not re.match(r'^https?://.*instagram\.com.*', text, re.IGNORECASE):
-        await message.answer("⚠️ <b>Invalid Link.</b> Please provide a valid Instagram post/reel link starting with http:// or https://")
+    clean_url = text.split("?")[0].rstrip("/")
+    
+    # Secondary hardening: Check if user is in penalty timeout
+    try:
+        from database.redis_manager import get_redis
+        redis = get_redis()
+        penalty_key = f"penalty:link:{message.from_user.id}"
+        if await redis.get(penalty_key):
+            await message.answer("🛑 <b>Too many invalid attempts.</b>\n\nPlease wait 30 seconds before trying again.")
+            return
+    except Exception as e:
+        logger.warning("Redis penalty check failed for %s: %s", message.from_user.id, e)
+    
+    strict_regex = r'^https?://(?:www\.)?instagram\.com/(?:p|reel|tv|reels)/[A-Za-z0-9_-]+/?$'
+    if not re.match(strict_regex, clean_url, re.IGNORECASE):
+        # Track invalid attempt
+        try:
+            attempts_key = f"invalid_link_attempts:{message.from_user.id}"
+            attempts = await redis.incr(attempts_key)
+            if attempts == 1:
+                await redis.expire(attempts_key, 30)
+            
+            if attempts >= 5:
+                await redis.setex(penalty_key, 30, "1")
+                await redis.delete(attempts_key)
+                await message.answer("🛑 <b>Too many invalid attempts.</b>\n\nYou are temporarily blocked from sending links for 30 seconds.")
+                return
+        except Exception:
+            pass
+
+        await message.answer("⚠️ <b>Invalid Link.</b> Please provide a valid Instagram post/reel link.\n\n<i>Example: https://www.instagram.com/reel/xyz123</i>")
         return
 
     data = await state.get_data()
@@ -163,18 +192,20 @@ async def handle_order_link(message: Message, state: FSMContext) -> None:
     pkg = PACKAGES.get(package_type)
     user_data = await get_user(message.from_user.id)
     sparks = user_data.get("spark_balance", 0) if user_data else 0
-    display_name = _PKG_DISPLAY.get(package_type, package_type.title())
+    display_name = pkg["ui_name"]
     nonce = secrets.token_hex(4)
 
-    await state.update_data(instagram_url=text)
+    await state.update_data(instagram_url=clean_url)
+    display_url = clean_url if len(clean_url) <= 35 else clean_url[:35] + "..."
     
     await message.answer(
-        f"🛒 <b>Order Confirmation</b>\n\n"
-        f"Package: <b>{display_name}</b>\n"
-        f"Views: <b>{pkg['views']:,}</b>\n"
-        f"Cost: <b>{pkg['sparks']:,} Sparks</b>\n"
-        f"Balance After: <b>{sparks - pkg['sparks']:,} Sparks</b>\n\n"
-        f"Confirm your order?",
+        f"🛒 <b>ORDER CONFIRMATION</b>\n"
+        f"---------------------------\n"
+        f"📦 Package: <b>{display_name}</b>\n"
+        f"🔗 Link: <code>{display_url}</code>\n"
+        f"💰 Cost: <b>{pkg['cost']:,} Sparks</b>\n"
+        f"---------------------------\n"
+        f"Kya aap is order ko confirm karna chahte hain?",
         reply_markup=confirm_order_keyboard(package_type, nonce),
     )
 
@@ -208,7 +239,8 @@ async def cb_confirm_order(query: CallbackQuery, state: FSMContext) -> None:
         order_id = await place_order_transactional(
             user_id=user_id,
             package_type=package_type,
-            sparks_spent=pkg["sparks"],
+            smm_service_id=pkg["smm_service_id"],
+            sparks_spent=pkg["cost"],
             views_ordered=pkg["views"],
             instagram_url=ig_url,
             nonce=nonce,
@@ -222,8 +254,16 @@ async def cb_confirm_order(query: CallbackQuery, state: FSMContext) -> None:
     except DuplicateOrderError:
         logger.warning("Spam/Duplicate blocked for user %s: Order nonce %s already processed.", user_id, nonce)
         await query.answer("⚠️ Order already processed!", show_alert=True)
-        # Optionally, edit text to reflect it was already processed
         await query.message.edit_text("✅ This order has already been processed successfully.")
+        return
+    except DuplicateLinkError:
+        logger.warning("Spam/Duplicate link blocked for user %s: Link already processing.", user_id)
+        await query.answer("⚠️ Is link par pehle se ek order chal raha hai!", show_alert=True)
+        await query.message.edit_text(
+            "❌ <b>Is link par pehle se ek order chal raha hai.</b>\n\n"
+            "Kripya order complete hone ka intezaar karein ya dusra link try karein.",
+            reply_markup=order_keyboard_empty()
+        )
         return
     except UserNotFoundError:
         await query.message.edit_text(
@@ -237,14 +277,28 @@ async def cb_confirm_order(query: CallbackQuery, state: FSMContext) -> None:
         )
         return
 
-    display_name = _PKG_DISPLAY.get(package_type, package_type.title())
+    display_name = pkg["ui_name"]
+
+    # Send alert to Admin Group for approval
+    from handlers.admin import send_admin_alert
+    await send_admin_alert(
+        bot=query.bot,
+        order_id=order_id,
+        user_id=user_id,
+        username=query.from_user.username,
+        package_ui_name=display_name,
+        views=pkg["views"],
+        cost=pkg["cost"],
+        instagram_url=ig_url,
+    )
+
     await query.message.edit_text(
-        f"✅ <b>Order Placed!</b>\n\n"
-        f"Package: <b>{display_name}</b>\n"
-        f"Views: <b>{pkg['views']:,}</b>\n"
-        f"Order ID: <code>{order_id[:8]}…</code>\n\n"
-        f"Views will be delivered within <b>45 minutes</b>. 🚀\n\n"
-        f"<i>Full delivery tracking coming in Phase 5.</i>",
+        f"✅ <b>Order Submitted!</b>\n\n"
+        f"📦 Package: <b>{display_name}</b>\n"
+        f"👁 Views: <b>{pkg['views']:,}</b>\n"
+        f"🆔 Order ID: <code>{order_id[:12]}</code>\n\n"
+        f"Aapka order review ke liye bhej diya gaya hai.\n"
+        f"Approve hote hi aapko notification milega! 🚀",
         reply_markup=back_to_dashboard_keyboard(),
     )
 

@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     # Optional / with defaults
     APK_FILE_ID: str = ""
     ADMIN_IDS: str = ""
+    ADMIN_GROUP_ID: int = 0
+    
+    # SMM Panel
+    SMM_API_URL: str = ""
+    SMM_API_KEY: str = ""
     
     # Webhook & Server
     REPLIT_DEV_DOMAIN: Optional[str] = None
@@ -32,6 +37,9 @@ settings = Settings()
 BOT_TOKEN = settings.BOT_TOKEN
 APK_FILE_ID = settings.APK_FILE_ID
 ADMIN_IDS = [int(x.strip()) for x in settings.ADMIN_IDS.split(",") if x.strip().isdigit()]
+ADMIN_GROUP_ID = settings.ADMIN_GROUP_ID
+SMM_API_URL = settings.SMM_API_URL
+SMM_API_KEY = settings.SMM_API_KEY
 
 REDIS_URL = settings.REDIS_URL
 
@@ -58,13 +66,7 @@ MYSTERY_BOX_MIN = 25
 MYSTERY_BOX_MAX = 2000
 SPARK_EXPIRY_DAYS = 90
 
-# Packages
-PACKAGES = {
-    "starter": {"sparks": 500,  "views": 1000},
-    "growth":  {"sparks": 1200, "views": 3000},
-    "pro":     {"sparks": 2500, "views": 7000},
-    "mega":    {"sparks": 5000, "views": 15000},
-}
+# Packages (Moved to config/packages.py)
 
 # Limits & VIPs
 VIP_SLOTS = 1000

@@ -21,6 +21,7 @@ Collections:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import datetime
 from typing import Any
@@ -47,6 +48,7 @@ USERS_COL = "users"
 ORDERS_COL = "orders"
 TRANSACTIONS_COL = "transactions"
 WAITLIST_COL = "waitlist"
+ACTIVE_LINK_LOCKS_COL = "active_link_locks"
 
 
 # ===========================================================================
@@ -55,6 +57,10 @@ WAITLIST_COL = "waitlist"
 
 class DuplicateOrderError(Exception):
     """Raised when a duplicate order nonce is detected (double-tap protection)."""
+
+
+class DuplicateLinkError(Exception):
+    """Raised when an order for the same Instagram link is already processing."""
 
 
 class InsufficientSparksError(Exception):
@@ -515,6 +521,7 @@ async def update_order_status(
     status: str,
     delivered_at: datetime | None = None,
     compensation_given: bool | None = None,
+    smm_order_id: int | None = None,
 ) -> None:
     """Update an order's status and optional delivery metadata."""
     db = get_db()
@@ -523,6 +530,8 @@ async def update_order_status(
         fields["delivered_at"] = delivered_at
     if compensation_given is not None:
         fields["compensation_given"] = compensation_given
+    if smm_order_id is not None:
+        fields["smm_order_id"] = smm_order_id
     await db.collection(ORDERS_COL).document(order_id).update(fields)
 
 
@@ -531,8 +540,9 @@ async def update_order_status(
 # ===========================================================================
 
 async def place_order_transactional(
-    user_id: int | str,
+    user_id: int,
     package_type: str,
+    smm_service_id: int,
     sparks_spent: int,
     views_ordered: int,
     instagram_url: str,
@@ -579,6 +589,15 @@ async def place_order_transactional(
         new_total_orders = user_data.get("total_orders", 0) + 1
         now = get_ist_now()
 
+        # Generate MD5 hash for the link to use as the lock Document ID
+        md5_hash = hashlib.md5(instagram_url.encode("utf-8")).hexdigest()
+        link_lock_ref = db.collection(ACTIVE_LINK_LOCKS_COL).document(md5_hash)
+        
+        # Read the lock document inside the transaction
+        link_lock_snap = await link_lock_ref.get(transaction=tx)
+        if link_lock_snap.exists:
+            raise DuplicateLinkError(f"Link {instagram_url} is already processing.")
+
         # Pre-generate document references
         order_ref = db.collection(ORDERS_COL).document()
         tx_ref = db.collection(TRANSACTIONS_COL).document()
@@ -594,10 +613,12 @@ async def place_order_transactional(
         tx.set(order_ref, {
             "user_id": str(user_id),
             "package_type": package_type,
+            "smm_service_id": smm_service_id,
             "sparks_spent": sparks_spent,
             "views_ordered": views_ordered,
             "instagram_url": instagram_url,
-            "status": "pending",
+            "status": "pending_approval",
+            "smm_order_id": None,
             "created_at": now,
             "delivered_at": None,
             "compensation_given": False,
@@ -612,6 +633,14 @@ async def place_order_transactional(
             "created_at": now,
         })
 
+        # 4. Create the link lock
+        tx.set(link_lock_ref, {
+            "instagram_url": instagram_url,
+            "order_id": order_ref.id,
+            "user_id": str(user_id),
+            "created_at": now,
+        })
+
         logger.info(
             "Order placed for user %s: -%s Sparks, order %s created.",
             user_id, sparks_spent, order_ref.id,
@@ -621,6 +650,98 @@ async def place_order_transactional(
     order_id = await _run_in_tx(transaction)
     await invalidate_user_cache(user_id)
     return order_id
+
+
+# ===========================================================================
+# ADMIN ORDER OPERATIONS — Cancel/Refund & Link Lock Cleanup
+# ===========================================================================
+
+async def get_order(order_id: str) -> dict[str, Any] | None:
+    """Fetch a single order document by its ID."""
+    db = get_db()
+    snap = await db.collection(ORDERS_COL).document(order_id).get()
+    if not snap.exists:
+        return None
+    data = snap.to_dict() or {}
+    data["id"] = snap.id
+    return data
+
+
+async def delete_link_lock(instagram_url: str) -> None:
+    """Delete the active link lock for a given Instagram URL.
+
+    Uses the same MD5 hashing scheme as place_order_transactional
+    to derive the document ID deterministically.
+    """
+    md5_hash = hashlib.md5(instagram_url.encode("utf-8")).hexdigest()
+    db = get_db()
+    await db.collection(ACTIVE_LINK_LOCKS_COL).document(md5_hash).delete()
+    logger.info("Link lock deleted for URL hash: %s", md5_hash)
+
+
+async def cancel_order_and_refund(order_id: str) -> dict[str, Any]:
+    """Cancel an order, refund Sparks to the user, and release the link lock.
+
+    This is NOT a Firestore transaction because it spans multiple
+    independent operations (order update, balance increment, transaction
+    log, link lock delete). Each operation is individually atomic via
+    Firestore sentinels (Increment). In the unlikely event of a partial
+    failure, the order status will already be 'cancelled' preventing
+    double-refunds on retry.
+
+    Returns:
+        The order data dict (for UI messages).
+
+    Raises:
+        ValueError: If order not found or already processed.
+    """
+    db = get_db()
+    order_ref = db.collection(ORDERS_COL).document(order_id)
+    order_snap = await order_ref.get()
+
+    if not order_snap.exists:
+        raise ValueError(f"Order {order_id} not found.")
+
+    order_data = order_snap.to_dict() or {}
+
+    if order_data.get("status") != "pending_approval":
+        raise ValueError(
+            f"Order {order_id} cannot be cancelled — current status: {order_data.get('status')}"
+        )
+
+    user_id = order_data["user_id"]
+    sparks = order_data["sparks_spent"]
+    ig_url = order_data.get("instagram_url", "")
+    now = get_ist_now()
+
+    # 1. Mark order as cancelled (first — prevents double-refund on retry)
+    await order_ref.update({
+        "status": "cancelled",
+        "cancelled_at": now,
+    })
+
+    # 2. Refund Sparks to user (atomic increment)
+    await increment_spark_balance(user_id, sparks)
+
+    # 3. Log refund in transaction ledger
+    await log_transaction(
+        user_id=user_id,
+        tx_type="refund",
+        amount=sparks,
+        source=f"order_cancelled_{order_id[:8]}",
+    )
+
+    # 4. Release the link lock so same URL can be used again
+    if ig_url:
+        await delete_link_lock(ig_url)
+
+    logger.info(
+        "Order %s cancelled & refunded: +%s Sparks to user %s",
+        order_id, sparks, user_id,
+    )
+
+    order_data["id"] = order_id
+    return order_data
 
 
 # ===========================================================================

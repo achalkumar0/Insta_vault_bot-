@@ -26,6 +26,7 @@ import random
 import re
 from typing import Any
 import config
+from config.packages import PACKAGES
 from dotenv import set_key
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -234,10 +235,13 @@ async def _render_order_screen(
     user_data = await get_user(user_id)
     sparks = user_data.get("spark_balance", 0) if user_data else 0
 
-    if sparks < 500:
+    # Dynamically calculate the minimum package cost
+    min_cost = min(pkg["cost"] for pkg in PACKAGES.values()) if PACKAGES else 500
+
+    if sparks < min_cost:
         text = (
             "😅 <b>Yaar, Sparks thode kam hain!</b>\n\n"
-            "Minimum needed: <b>500 Sparks</b>\n\n"
+            f"Minimum needed: <b>{min_cost:,} Sparks</b>\n\n"
             "Mission complete kar ya Mystery Box khol aur Sparks kamao!"
         )
         kb = order_keyboard_empty()

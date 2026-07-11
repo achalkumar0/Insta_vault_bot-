@@ -27,8 +27,9 @@ import config as _config
 from config import BOT_TOKEN, WEBAPP_HOST, WEBAPP_PORT, WEBHOOK_PATH, WEBHOOK_URL
 from database.firebase_init import init_firebase
 from database.redis_manager import close_redis, init_redis
-from handlers import errors, main_menu, orders, referrals, start
+from handlers import admin, errors, main_menu, orders, referrals, start
 from middlewares.throttling import ThrottlingMiddleware
+from middlewares.fsm_reset import FSMResetMiddleware
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -97,6 +98,7 @@ def _build_bot_and_dispatcher():
     # Register routers (most-specific first)
     dp.include_router(errors.router)
     dp.include_router(start.router)
+    dp.include_router(admin.router)
     dp.include_router(main_menu.router)
     dp.include_router(orders.router)
     dp.include_router(referrals.router)
@@ -105,6 +107,11 @@ def _build_bot_and_dispatcher():
     throttle = ThrottlingMiddleware()
     dp.message.outer_middleware(throttle)
     dp.callback_query.outer_middleware(throttle)
+
+    # Global FSM Reset middleware — prevents state leaks on navigation
+    fsm_reset = FSMResetMiddleware()
+    dp.message.middleware(fsm_reset)
+    dp.callback_query.middleware(fsm_reset)
 
     # Logging middleware to track incoming updates
     from aiogram import BaseMiddleware

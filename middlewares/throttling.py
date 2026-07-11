@@ -67,9 +67,13 @@ class ThrottlingMiddleware(BaseMiddleware):
         if isinstance(event, Message):
             if event.from_user:
                 user_id = event.from_user.id
-            if event.text and event.text.startswith("/start"):
-                throttle_type = "macro"
-                cooldown_to_apply = self.cooldown
+            if event.text:
+                if event.text.startswith("/start"):
+                    throttle_type = "macro"
+                    cooldown_to_apply = self.cooldown
+                elif not event.text.startswith("/"):
+                    throttle_type = "micro"
+                    cooldown_to_apply = self.micro_cooldown
 
         elif isinstance(event, CallbackQuery):
             if event.from_user:

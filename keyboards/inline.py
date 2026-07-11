@@ -13,7 +13,9 @@ P3 Cleanup: Removed unused `from config import PACKAGES` import.
 """
 
 import config
+from config.packages import PACKAGES
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
 # ===========================================================================
@@ -163,34 +165,25 @@ def order_keyboard_full() -> InlineKeyboardMarkup:
     Package selection — user has enough Sparks (>= 500).
     Underscore callback format — exclusively handled by orders.py.
     """
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🌱 Starter Boost — 1,000 Views | 500 Sparks",
-                    callback_data="order_pkg_starter",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔥 Growth Pack — 3,000 Views | 1,200 Sparks ⭐ BEST",
-                    callback_data="order_pkg_growth",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="💎 Pro Blast — 7,000 Views | 2,500 Sparks",
-                    callback_data="order_pkg_pro",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🏠 Back to Dashboard",
-                    callback_data="go_dashboard",
-                )
-            ],
-        ]
+    builder = InlineKeyboardBuilder()
+    
+    for pkg_key, pkg_data in PACKAGES.items():
+        btn_text = f"{pkg_data['ui_name']} | {pkg_data['cost']:,} Sparks"
+        builder.button(
+            text=btn_text,
+            callback_data=f"order_pkg_{pkg_key}"
+        )
+    
+    # Add back button
+    builder.button(
+        text="🏠 Back to Dashboard",
+        callback_data="go_dashboard"
     )
+    
+    # 1 button per row
+    builder.adjust(1)
+    
+    return builder.as_markup()
 
 
 def order_keyboard_empty() -> InlineKeyboardMarkup:
@@ -342,6 +335,53 @@ def confirm_order_keyboard(package_type: str, nonce: str) -> InlineKeyboardMarku
                     text="❌ Cancel",
                     callback_data="order_cancel",
                 )
+            ],
+        ]
+    )
+
+
+def admin_order_alert_keyboard(order_id: str, user_id: int) -> InlineKeyboardMarkup:
+    """Admin group inline keyboard for order approval/cancellation.
+
+    Three buttons:
+      ✅ Approve  — triggers admin_approve:{order_id}
+      ❌ Cancel   — triggers admin_cancel:{order_id}
+      💬 Message  — URL button opens DM with the user
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Approve",
+                    callback_data=f"admin_approve:{order_id}",
+                ),
+                InlineKeyboardButton(
+                    text="❌ Cancel",
+                    callback_data=f"admin_cancel:{order_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💬 Message User",
+                    url=f"tg://user?id={user_id}",
+                ),
+            ],
+        ]
+    )
+
+
+def admin_check_status_keyboard(order_id: str) -> InlineKeyboardMarkup:
+    """Post-approval keyboard with a Check Status button.
+
+    Replaces the Approve/Cancel buttons after an order is approved.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔄 Check Status",
+                    callback_data=f"admin_check:{order_id}",
+                ),
             ],
         ]
     )
