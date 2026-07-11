@@ -115,15 +115,30 @@ def _build_bot_and_dispatcher():
 
     # Logging middleware to track incoming updates
     from aiogram import BaseMiddleware
+    from aiogram.types import Message, CallbackQuery
+    
     class UpdateLoggerMiddleware(BaseMiddleware):
         async def __call__(self, handler, event, data):
-            if hasattr(event, "message") and event.message and event.message.text:
-                logger.info(f"Incoming Command/Text: {event.message.text}")
-            elif hasattr(event, "callback_query") and event.callback_query and event.callback_query.data:
-                logger.info(f"Incoming Callback: {event.callback_query.data}")
+            if isinstance(event, Message) and event.text:
+                text = event.text
+                is_command = text.startswith("/")
+                
+                # Check if user is in an FSM state
+                state = data.get("state")
+                current_state = await state.get_state() if state else None
+                
+                # Log only if it's a command OR user is in an FSM state (like IG linking)
+                if is_command or current_state is not None:
+                    logger.info(f"Incoming Command/Text: {text}")
+                    
+            elif isinstance(event, CallbackQuery) and event.data:
+                logger.info(f"Incoming Callback: {event.data}")
+                
             return await handler(event, data)
 
-    dp.update.outer_middleware(UpdateLoggerMiddleware())
+    # Register on specific event types so 'state' is available in data
+    dp.message.outer_middleware(UpdateLoggerMiddleware())
+    dp.callback_query.outer_middleware(UpdateLoggerMiddleware())
 
     return bot, dp
 
