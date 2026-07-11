@@ -38,8 +38,6 @@ from database.db_manager import (
     get_leaderboard,
     get_user,
     get_user_orders,
-    increment_spark_balance,
-    log_transaction,
     update_user,
     open_mystery_box_transactional,
     CooldownActiveError,

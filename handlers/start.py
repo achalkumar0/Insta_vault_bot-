@@ -34,9 +34,6 @@ from database.db_manager import (
     create_user_transactional,
     get_user,
     get_user_by_referral_code,
-    increment_spark_balance,
-    log_transaction,
-    reward_referrer,
     update_user,
     user_exists,
 )
