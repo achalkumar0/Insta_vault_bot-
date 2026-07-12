@@ -173,6 +173,8 @@ async def cmd_dashboard(message: Message) -> None:
 
 @router.callback_query(F.data == "go_dashboard")
 async def cb_go_dashboard(query: CallbackQuery) -> None:
+    if not query.message or not hasattr(query.message, 'edit_text'):
+        return
     """
     Back-to-dashboard from any sub-screen.
     """
@@ -219,6 +221,8 @@ async def cmd_mission(message: Message) -> None:
 
 @router.callback_query(F.data == "nav_order")
 async def cb_nav_order(query: CallbackQuery) -> None:
+    if not query.message or not hasattr(query.message, 'edit_text'):
+        return
     await query.answer()
     if query.message is None:
         return
@@ -275,6 +279,8 @@ async def cmd_rewards(message: Message) -> None:
 
 @router.callback_query(F.data == "nav_rewards")
 async def cb_nav_rewards(query: CallbackQuery) -> None:
+    if not query.message or not hasattr(query.message, 'edit_text'):
+        return
     await query.answer()
     if query.message is None:
         return
@@ -320,6 +326,8 @@ async def cmd_profile(message: Message) -> None:
 
 @router.callback_query(F.data == "nav_profile")
 async def cb_nav_profile(query: CallbackQuery) -> None:
+    if not query.message or not hasattr(query.message, 'edit_text'):
+        return
     await query.answer()
     if query.message is None:
         return
@@ -395,6 +403,8 @@ _BOX_WEIGHTS = [t[2] for t in _BOX_TIERS]
 
 @router.callback_query(F.data == "action_mystery_box")
 async def cb_mystery_box(query: CallbackQuery) -> None:
+    if not query.message or not hasattr(query.message, 'edit_text'):
+        return
     if query.message is None:
         await query.answer()
         return
@@ -442,6 +452,8 @@ _RANK_MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
 @router.callback_query(F.data == "nav_leaderboard")
 async def cb_nav_leaderboard(query: CallbackQuery) -> None:
+    if not query.message or not hasattr(query.message, 'edit_text'):
+        return
     await query.answer()
     if query.message is None:
         return
@@ -596,6 +608,8 @@ async def _render_order_history(
 
 @router.callback_query(F.data == "nav_order_history")
 async def cb_nav_order_history(query: CallbackQuery) -> None:
+    if not query.message or not hasattr(query.message, 'edit_text'):
+        return
     await query.answer()
     if query.message is None:
         return
@@ -604,6 +618,8 @@ async def cb_nav_order_history(query: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("order_history_page:"))
 async def cb_order_history_page(query: CallbackQuery) -> None:
+    if not query.message or not hasattr(query.message, 'edit_text'):
+        return
     await query.answer()
     if query.message is None:
         return
@@ -631,11 +647,15 @@ _COMING_SOON = {
 
 @router.callback_query(F.data.in_(_COMING_SOON))
 async def cb_coming_soon(query: CallbackQuery) -> None:
+    if not query.message or not hasattr(query.message, 'edit_text'):
+        return
     await query.answer("🚧 Coming soon! Yeh feature Phase 5 mein aayega.", show_alert=True)
 
 
 @router.callback_query(F.data == "action_download_apk")
 async def cb_action_download_apk(query: CallbackQuery) -> None:
+    if not query.message or not hasattr(query.message, 'edit_text'):
+        return
     """Send the APK to the user with a nice caption."""
     # Top 1% interactive toast
     await query.answer("⏳ Fetching the latest version for you...", show_alert=False)
@@ -668,6 +688,8 @@ async def cb_action_download_apk(query: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "action_link_ig")
 async def cb_action_link_ig(query: CallbackQuery, state: FSMContext) -> None:
+    if not query.message or not hasattr(query.message, 'edit_text'):
+        return
     """Enter FSM: prompt the user to send their Instagram handle or URL."""
     await query.answer()
     if query.message is None:

@@ -38,7 +38,7 @@ def format_timestamp(dt: datetime | str | None, fmt: str = "%d %b %Y, %I:%M %p")
 
     tz = pytz.timezone(TIMEZONE)
     if dt.tzinfo is None:
-        dt = pytz.utc.localize(dt)
+        dt = tz.localize(dt)
     return dt.astimezone(tz).strftime(fmt)
 
 
