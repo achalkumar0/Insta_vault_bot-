@@ -126,8 +126,6 @@ async def cb_beat_2(query: CallbackQuery, state: FSMContext) -> None:
         await query.answer()
         return
     await query.answer()
-    if query.message is None:
-        return
 
     # Extract ref_code carried stateless from Beat 1 callback_data
     parts = query.data.split(":", 1)
@@ -159,8 +157,6 @@ async def cb_how_it_works(query: CallbackQuery) -> None:
         await query.answer()
         return
     await query.answer()
-    if query.message is None:
-        return
 
     # Carry ref_code stateless into trust screen back-button
     parts = query.data.split(":", 1)
@@ -192,8 +188,6 @@ async def cb_beat_3(query: CallbackQuery, state: FSMContext) -> None:
         await query.answer()
         return
     await query.answer()
-    if query.message is None:
-        return
 
     # Extract ref_code from callback_data (stateless — crash-proof across restarts)
     parts = query.data.split(":", 1)
@@ -290,8 +284,6 @@ async def cb_nav_mission(query: CallbackQuery) -> None:
     Now shows proper Phase 3 content (fixed from Phase 1 placeholder).
     """
     await query.answer()
-    if query.message is None:
-        return
 
     await query.message.edit_text(
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -317,8 +309,6 @@ async def cb_nav_refer(query: CallbackQuery) -> None:
     Referral screen — edits in-place.
     """
     await query.answer()
-    if query.message is None:
-        return
     user = query.from_user
     if user is None:
         return

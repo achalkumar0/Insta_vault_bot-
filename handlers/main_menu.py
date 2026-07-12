@@ -226,8 +226,6 @@ async def cb_nav_order(query: CallbackQuery) -> None:
         await query.answer()
         return
     await query.answer()
-    if query.message is None:
-        return
     user_id = query.from_user.id
     await _render_order_screen(user_id, query.message, edit=True)
 
@@ -285,8 +283,6 @@ async def cb_nav_rewards(query: CallbackQuery) -> None:
         await query.answer()
         return
     await query.answer()
-    if query.message is None:
-        return
     await _render_rewards_screen(query.from_user.id, query.message, edit=True)
 
 
@@ -333,8 +329,6 @@ async def cb_nav_profile(query: CallbackQuery) -> None:
         await query.answer()
         return
     await query.answer()
-    if query.message is None:
-        return
     user = query.from_user
     await _render_profile_screen(
         user.id, user.first_name or "Member", query.message, edit=True
@@ -410,9 +404,6 @@ async def cb_mystery_box(query: CallbackQuery) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
         await query.answer()
         return
-    if query.message is None:
-        await query.answer()
-        return
 
     # FIX: Answer immediately to prevent Telegram timeout during Firestore transaction
     await query.answer("🎰 Opening Mystery Box...", show_alert=False)
@@ -461,8 +452,6 @@ async def cb_nav_leaderboard(query: CallbackQuery) -> None:
         await query.answer()
         return
     await query.answer()
-    if query.message is None:
-        return
 
     top_users = await get_leaderboard(limit=10)
 
@@ -618,8 +607,6 @@ async def cb_nav_order_history(query: CallbackQuery) -> None:
         await query.answer()
         return
     await query.answer()
-    if query.message is None:
-        return
     await _render_order_history(query.from_user.id, query.message, edit=True, page=0)
 
 
@@ -629,8 +616,6 @@ async def cb_order_history_page(query: CallbackQuery) -> None:
         await query.answer()
         return
     await query.answer()
-    if query.message is None:
-        return
     try:
         page = int(query.data.split(":")[1])
     except (IndexError, ValueError):
@@ -698,8 +683,6 @@ async def cb_action_link_ig(query: CallbackQuery, state: FSMContext) -> None:
         return
     """Enter FSM: prompt the user to send their Instagram handle or URL."""
     await query.answer()
-    if query.message is None:
-        return
 
     await state.set_state(ProfileState.waiting_for_ig_handle)
 
