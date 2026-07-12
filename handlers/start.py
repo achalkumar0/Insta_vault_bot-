@@ -123,6 +123,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith("ob_beat_2"))
 async def cb_beat_2(query: CallbackQuery, state: FSMContext) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     await query.answer()
     if query.message is None:
@@ -155,6 +156,7 @@ async def cb_beat_2(query: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith("ob_how_it_works"))
 async def cb_how_it_works(query: CallbackQuery) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     await query.answer()
     if query.message is None:
@@ -187,6 +189,7 @@ async def cb_how_it_works(query: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("ob_beat_3"))
 async def cb_beat_3(query: CallbackQuery, state: FSMContext) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     await query.answer()
     if query.message is None:
@@ -269,6 +272,7 @@ async def cb_beat_3(query: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "nav_dashboard")
 async def cb_nav_dashboard(query: CallbackQuery) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     from handlers.main_menu import show_dashboard
     user = query.from_user
@@ -279,6 +283,7 @@ async def cb_nav_dashboard(query: CallbackQuery) -> None:
 @router.callback_query(F.data == "nav_mission")
 async def cb_nav_mission(query: CallbackQuery) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     """
     Mission screen from dashboard inline button — edits in-place.
@@ -306,6 +311,7 @@ async def cb_nav_mission(query: CallbackQuery) -> None:
 @router.callback_query(F.data == "nav_refer")
 async def cb_nav_refer(query: CallbackQuery) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     """
     Referral screen — edits in-place.

@@ -101,6 +101,7 @@ def _verify_admin_group(query: CallbackQuery) -> bool:
 @router.callback_query(F.data.startswith("admin_cancel:"))
 async def cb_admin_cancel(query: CallbackQuery) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     """Admin cancels an order — refund Sparks, release link lock, notify user."""
     if not _verify_admin_group(query):
@@ -152,6 +153,7 @@ async def cb_admin_cancel(query: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("admin_approve:"))
 async def cb_admin_approve(query: CallbackQuery) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     """Admin approves an order — hit SMM API, save smm_order_id, notify user."""
     if not _verify_admin_group(query):
@@ -239,6 +241,7 @@ async def cb_admin_approve(query: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("admin_check:"))
 async def cb_admin_check_status(query: CallbackQuery) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     """Admin checks order status — fetch live status from SMM Panel API."""
     if not _verify_admin_group(query):

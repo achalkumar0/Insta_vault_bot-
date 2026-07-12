@@ -97,6 +97,7 @@ async def cmd_order(message: Message) -> None:
 @router.callback_query(F.data.startswith("order_pkg_"))
 async def cb_select_package(query: CallbackQuery, state: FSMContext) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     """User tapped a package — ask for Instagram link."""
     await query.answer()
@@ -219,6 +220,7 @@ async def handle_order_link(message: Message, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith("order_confirm:"))
 async def cb_confirm_order(query: CallbackQuery, state: FSMContext) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     """
     Confirm order: deduct Sparks, create Firestore order document.
@@ -309,6 +311,7 @@ async def cb_confirm_order(query: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "order_cancel")
 async def cb_cancel_order(query: CallbackQuery) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
+        await query.answer()
         return
     await query.answer("Order cancelled.")
     await query.message.edit_text(

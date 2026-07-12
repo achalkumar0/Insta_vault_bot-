@@ -114,8 +114,11 @@ async def get_user(user_id: int | str) -> dict[str, Any] | None:
 async def update_user(user_id: int | str, fields: dict[str, Any]) -> None:
     """Partially update fields on an existing user document."""
     db = get_db()
-    await db.collection(USERS_COL).document(str(user_id)).update(fields)
-    await invalidate_user_cache(user_id)
+    try:
+        await db.collection(USERS_COL).document(str(user_id)).update(fields)
+        await invalidate_user_cache(user_id)
+    except Exception as e:
+        logger.warning("Attempted to update non-existent user %s: %s", user_id, e)
 
 
 async def update_last_login(user_id: int | str) -> None:
@@ -630,6 +633,7 @@ async def place_order_transactional(
             "type": "spend",
             "amount": sparks_spent,
             "source": f"order_{package_type}",
+            "order_id": order_ref.id,
             "created_at": now,
         })
 
