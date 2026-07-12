@@ -309,7 +309,6 @@ async def cb_nav_refer(query: CallbackQuery) -> None:
         return
     """
     Referral screen — edits in-place.
-    Phase 5: Dynamic bot username + full Viral Growth UI.
     """
     await query.answer()
     if query.message is None:

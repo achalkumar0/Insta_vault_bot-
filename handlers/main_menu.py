@@ -635,13 +635,8 @@ async def cb_order_history_page(query: CallbackQuery) -> None:
 # ===========================================================================
 
 _COMING_SOON = {
-    "order_pkg_mega",       # Mega package — Phase 5
     "contact_support",
     "faq",
-    "mission_start",
-    "mystery_box_open",
-    "notif_settings",
-    "tx_history",
 }
 
 
@@ -649,7 +644,7 @@ _COMING_SOON = {
 async def cb_coming_soon(query: CallbackQuery) -> None:
     if not query.message or not hasattr(query.message, 'edit_text'):
         return
-    await query.answer("🚧 Coming soon! Yeh feature Phase 5 mein aayega.", show_alert=True)
+    await query.answer("🚧 This feature is currently under development and will be available in the next update!", show_alert=True)
 
 
 @router.callback_query(F.data == "action_download_apk")

@@ -222,7 +222,6 @@ async def cb_confirm_order(query: CallbackQuery, state: FSMContext) -> None:
         return
     """
     Confirm order: deduct Sparks, create Firestore order document.
-    Full delivery tracking will be implemented in Phase 5.
     """
     await query.answer("⏳ Processing…", show_alert=False)
     parts = query.data.split(":")
