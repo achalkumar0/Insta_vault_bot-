@@ -247,7 +247,15 @@ async def index_handler(request: web.Request) -> web.Response:
 
 async def health_check(request: web.Request) -> web.Response:
     mode = "webhook" if USE_WEBHOOK else "polling"
-    return web.json_response({"status": "ok", "service": "InstaVault Bot", "mode": mode})
+    try:
+        from database.db_manager import get_db
+        db = get_db()
+        await db.collection("users").limit(1).get()
+        status = "ok"
+    except Exception as e:
+        logger.error("Health check failed: %s", e)
+        status = "error"
+    return web.json_response({"status": status, "service": "InstaVault Bot", "mode": mode})
 
 
 # --------------------------------------------------------------------------

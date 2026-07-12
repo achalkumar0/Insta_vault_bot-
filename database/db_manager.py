@@ -850,30 +850,6 @@ async def log_transaction(
     return ref.id
 
 
-async def get_user_transactions(
-    user_id: int | str,
-    limit: int = 20,
-) -> list[dict[str, Any]]:
-    """Return recent transactions for a user, newest first.
-
-    Uses Firestore-side ordering via a composite index on
-    ``(user_id, created_at DESC)``.
-    """
-    db = get_db()
-    query = (
-        db.collection(TRANSACTIONS_COL)
-        .where(filter=FieldFilter("user_id", "==", str(user_id)))
-        .order_by("created_at", direction="DESCENDING")
-        .limit(limit)
-    )
-    results: list[dict[str, Any]] = []
-    async for doc in query.stream():
-        data = doc.to_dict()
-        data["tx_id"] = doc.id
-        results.append(data)
-    return results
-
-
 # ===========================================================================
 # WAITLIST OPERATIONS
 # ===========================================================================
@@ -902,15 +878,6 @@ async def get_waitlist_entry(user_id: int | str) -> dict[str, Any] | None:
     db = get_db()
     doc = await db.collection(WAITLIST_COL).document(str(user_id)).get()
     return doc.to_dict() if doc.exists else None
-
-
-async def get_waitlist_count() -> int:
-    """Return the total number of users on the waitlist."""
-    db = get_db()
-    count = 0
-    async for _ in db.collection(WAITLIST_COL).stream():
-        count += 1
-    return count
 
 
 async def update_waitlist_entry(user_id: int | str, fields: dict[str, Any]) -> None:
